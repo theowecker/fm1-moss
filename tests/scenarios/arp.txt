@@ -2,17 +2,17 @@
 wait 600
 tap ENV
 wait 50
-expect page 3
+expect page 5
 expect tap 1
 tap ENV
 wait 50
 expect tap 2
 tapkey 7
 wait 100
-expect held 6
+expect held 1
 tapkey 7
 wait 100
-expect held 7
+expect held 0
 tap ENV
 wait 50
 expect tap 0

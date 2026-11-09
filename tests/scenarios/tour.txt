@@ -46,7 +46,7 @@ expect page 1
 shot mix.png
 tap GLO
 wait 100
-expect page 9
+expect page 10
 shot setup.png
 turn SELECT 1
 wait 100

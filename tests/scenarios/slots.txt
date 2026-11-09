@@ -29,7 +29,7 @@ tap LFO
 tap LFO
 tap LFO
 wait 50
-expect page 7
+expect page 9
 turn K1 1
 wait 200
 expect libcur 1

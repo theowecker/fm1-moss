@@ -217,7 +217,7 @@ static void pan_gains(float pan, float *l, float *r)   /* equal power, pan -1..1
 }
 
 enum { C_MODE, C_MACRO, C_MIX, C_TEMPO, C_ROOT, C_MOOD, C_PLAY, C_FREEZE, C_NEW, C_NOTE, C_PANIC, C_SEED, C_SHED, C_KEYSET,
-       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX };
+       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION };
 typedef struct {
     uint8_t type;
     int16_t a, b;
@@ -256,7 +256,8 @@ enum { SNAP_FREE, SNAP_SCALE, SNAP_CHORD };
 enum { KV_AUTO, KV_EP, KV_BELL, KV_PAD, KV_KALIMBA };
 static struct {
     int snap, voice, listen, hold;
-    uint16_t pool;                     /* HOLD: the pitch classes the music may play, bit 0 = C */
+    int8_t seed[8];                    /* HOLD: the notes planted, -1 none */
+    float seed_t[8];                   /* seconds until each plays again */
     float harmony;
     float energy;                      /* 0..1, raised by playing the keys, makes the generators busier */
     int8_t held[128][3];               /* per held key: sounding note and up to two harmony notes, -1 none */
@@ -371,13 +372,14 @@ static void voice_cut(voice_t *v)
     v->out_l = v->out_r = 0.0f;
 }
 
-/* the loop's own tape: WARBLE bends its pitch, DIRT drives it, AGE darkens it, SEND feeds the reverb and delay */
+/* the loop's own tape: WARBLE bends its pitch, DIRT drives it, AGE wears it like a copy of a copy (darker, thinner,
+ * narrower, quieter), SEND feeds the reverb and delay */
 static struct {
     float warble, dirt, age, send;
     float wmul, wph, wph2;             /* the pitch bend now, its two slow phases */
-    float age_a, drive, makeup;
-    float lp_l, lp_r;
-} lfx = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f};
+    float age_a, age_hp, width, wear, drive, makeup;
+    float lp_l, lp_r, hp_l, hp_r;
+} lfx = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 static void lfx_set(int i, int v)
 {
@@ -390,7 +392,10 @@ static void lfx_set(int i, int v)
         lfx.age = x;
     else
         lfx.send = 2.0f * x;
-    lfx.age_a = onepole_a(14000.0f * fm_exp2f(-3.5f * lfx.age));
+    lfx.age_a = onepole_a(14000.0f * fm_exp2f(-4.5f * lfx.age));
+    lfx.age_hp = onepole_a(20.0f + 380.0f * lfx.age * lfx.age);
+    lfx.width = 1.0f - 0.85f * lfx.age;
+    lfx.wear = 1.0f - 0.5f * lfx.age;
     lfx.drive = 1.0f + 7.0f * lfx.dirt;
     lfx.makeup = 1.0f / (1.0f + 2.5f * lfx.dirt);
 }
@@ -432,26 +437,9 @@ static voice_t *voice_alloc(int layer)
 }
 
 /* attack and release in seconds; gate in samples (-1 held) */
-/* in HOLD, a note the set lacks moves to the nearest note it has; a tie goes down */
-static int pool_fit(int note)
-{
-    int d;
-    if (!kb.hold || !kb.pool)
-        return note;
-    for (d = 0; d < 12; d++) {
-        if (kb.pool >> ((note - d + 120) % 12) & 1u)
-            return note - d;
-        if (kb.pool >> ((note + d) % 12) & 1u)
-            return note + d;
-    }
-    return note;
-}
-
 static voice_t *voice_start(int kind, int note, float vel, int layer, int32_t gate, float atk, float rel, float pan)
 {
     voice_t *v;
-    if (layer != SRC_KEYS)
-        note = pool_fit(note);
     v = voice_alloc(layer);
     float f = mtof((float)note), bright;
     v->kind = (uint8_t)kind;
@@ -479,7 +467,7 @@ static voice_t *voice_start(int kind, int note, float vel, int layer, int32_t ga
         v->amp = 0.17f * (0.35f + 0.65f * vel);
         v->lp_a = onepole_a(2400.0f + 3500.0f * vel);
         v->rev = 0.35f;
-        v->echo = 0.18f;
+        v->echo = 0.25f;
         break;
     case V_PAD:
         v->ic2 = v->ic * 1.0059f;
@@ -589,7 +577,6 @@ static struct {
 
 static void bass_note(int note, float vel, int32_t gate, float glide_secs, float atk)
 {
-    note = pool_fit(note);
     bass.target = mtof((float)note) / MS_SR;
     if (bass.env < 0.01f || glide_secs <= 0.0f)
         bass.inc = bass.target;
@@ -1037,7 +1024,15 @@ HOT void cricket_tick(cricket_t *c, float life, float *l, float *r)
 #define ECHO_N 28672                   /* stored at half rate (darker, like tape, and half the RAM): 1.3 s */
 static int16_t echo_l[ECHO_N] PLAT_POOL, echo_r[ECHO_N] PLAT_POOL;
 static uint32_t echo_w;
-static float echo_len, echo_len_target, echo_lp_l, echo_lp_r, echo_hold_l, echo_hold_r;
+static float echo_len, echo_len_target, echo_lp_l, echo_lp_r, echo_hp_l, echo_hp_r, echo_hold_l, echo_hold_r;
+/* MOTION: MOD wobbles the repeats, RANDOM throws in events, TONE darkens or brightens the repeats, SPREAD widens them */
+static struct {
+    float mod, random, tone_a, hp_a, spread;
+    float mod_ph, mod_m;
+    float ev_t;                        /* seconds until chance may throw an event */
+    float time_base, time_hold;        /* TIME's own delay length, and how long a jump stays away from it */
+    float fb_boost, rev_boost;         /* an event's lift of the feedback and the reverb, easing back to 0 */
+} mo = {0.0f, 0.0f, 0.25f, 0.0f, 1.0f, 0.0f, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 static int echo_half;
 
 #define NLINE 4
@@ -1119,7 +1114,7 @@ HOT void echo_tick(float in, float *l, float *r)
     float len, pos, fr, a, b, dl, dr2, wl, wr;
     int32_t i0;
     echo_len += 0.00005f * (echo_len_target - echo_len);   /* time changes glide, like tape */
-    len = h_minf(echo_len * (1.0f + k.echo_wow * sin_t(wow_ph)), (float)(ECHO_N - 4));
+    len = h_minf(echo_len * (1.0f + k.echo_wow * sin_t(wow_ph) + mo.mod * mo.mod * 0.025f * mo.mod_m), (float)(ECHO_N - 4));
     pos = (float)echo_w + (echo_half ? 0.5f : 0.0f) - len;
     if (pos < 0.0f)
         pos += (float)ECHO_N;
@@ -1133,11 +1128,15 @@ HOT void echo_tick(float in, float *l, float *r)
     a = (float)echo_r[i0] * (1.0f / 32767.0f);
     b = (float)echo_r[(i0 + 1) % ECHO_N] * (1.0f / 32767.0f);
     dr2 = a + fr * (b - a);
-    echo_lp_l += 0.25f * (dl - echo_lp_l);
-    echo_lp_r += 0.25f * (dr2 - echo_lp_r);
+    echo_lp_l += mo.tone_a * (dl - echo_lp_l);
+    echo_lp_r += mo.tone_a * (dr2 - echo_lp_r);
+    echo_hp_l += mo.hp_a * (echo_lp_l - echo_hp_l);
+    echo_hp_r += mo.hp_a * (echo_lp_r - echo_hp_r);
+    dl = echo_lp_l - echo_hp_l;
+    dr2 = echo_lp_r - echo_hp_r;
     /* ping-pong: input enters left, repeats cross over; pairs of samples are averaged into one stored */
-    wl = soft_tanh(in + k.echo_fb * echo_lp_r);
-    wr = k.echo_fb * echo_lp_l;
+    wl = soft_tanh(in + (k.echo_fb + mo.fb_boost) * dr2);
+    wr = (k.echo_fb + mo.fb_boost) * dl;
     if (echo_half) {
         echo_l[echo_w] = to16(0.5f * (echo_hold_l + wl));
         echo_r[echo_w] = to16(0.5f * (echo_hold_r + wr));
@@ -1147,8 +1146,8 @@ HOT void echo_tick(float in, float *l, float *r)
         echo_hold_r = wr;
     }
     echo_half ^= 1;
-    *l = dl;
-    *r = dr2;
+    *l = dl * (0.5f + 0.5f * mo.spread) + dr2 * (0.5f - 0.5f * mo.spread);
+    *r = dr2 * (0.5f + 0.5f * mo.spread) + dl * (0.5f - 0.5f * mo.spread);
 }
 
 HOT float ap_run(int i, float x, float g)
@@ -1578,9 +1577,11 @@ static void apply(void)
     k.rev_size = 0.55f + 0.45f * space;
     k.film = u(st.fx[3]);
     k.tone_fc = fm_maxf(k.tone_fc * (1.0f - 0.55f * k.film), 300.0f);
-    k.echo_mix = u(st.fx[0]) * 0.9f;
+    k.echo_mix = u(st.fx[0]) * (0.9f + 1.2f * u(st.fx[0]));   /* gentle low, and at the top the repeats take over */
     k.echo_fb = u(st.fx[2]) * 0.88f;
     echo_len_target = fm_minf(DIV_BEATS[clamp(st.fx[1], 0, 5)] * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
+    mo.time_base = echo_len_target;
+    mo.time_hold = 0.0f;
     k.shimmer = k.reverse = k.damp_hz = 0.0f;
     k.echo_wow = 0.004f * k.film;
     k.echo_to_rev = 0.4f;
@@ -2210,25 +2211,130 @@ static int loop_listening(void)
     return lp.state == LP_REC || lp.state == LP_DUB || (kb.listen && lp.state == LP_PLAY);
 }
 
-/* HOLD: the keys add notes to the set the music plays from, or take them out (the last one stays). A note added
- * swells in once, low and soft, so it is heard arriving */
+/* RANDOM: now and then the delay jumps to another division (its glide bends the repeats' pitch), the repeats swell
+ * toward endless for a moment, or the reverb blooms */
+static void motion_tick(float dt)
+{
+    mo.mod_ph = wrap1(mo.mod_ph + (0.25f + 0.9f * mo.mod) * dt);
+    mo.mod_m = sin_t(mo.mod_ph);
+    mo.fb_boost *= 1.0f - dt / 1.5f;
+    if (mo.time_hold > 0.0f && (mo.time_hold -= dt) <= 0.0f)
+        echo_len_target = mo.time_base;
+    mo.rev_boost *= 1.0f - dt / 3.0f;
+    if (mo.random <= 0.0f || (mo.ev_t -= dt) > 0.0f)
+        return;
+    mo.ev_t = (1.0f + 6.0f * frand()) * (1.2f - mo.random);
+    if (frand() > mo.random)
+        return;
+    switch (irand(3)) {
+    case 0:
+        echo_len_target = fm_minf(DIV_BEATS[irand(6)] * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
+        mo.time_hold = 3.0f + 5.0f * frand();
+        break;
+    case 1:
+        mo.fb_boost = fm_maxf(0.0f, 0.9f - k.echo_fb);
+        break;
+    default:
+        mo.rev_boost = 0.5f;
+        break;
+    }
+}
+
+static void motion_set(int i, int v)
+{
+    float x = (float)clamp(v, 0, 100) * 0.01f;
+    if (i == 0)
+        mo.mod = x;
+    else if (i == 1)
+        mo.random = x;
+    else if (i == 2) {                   /* TONE tilts: left of noon darker, right of it thinner */
+        mo.tone_a = onepole_a(500.0f * fm_exp2f(4.6f * fm_minf(2.0f * x, 1.0f)));
+        mo.hp_a = x > 0.5f ? onepole_a(40.0f * fm_exp2f(5.5f * (2.0f * x - 1.0f))) : 0.0f;
+    } else {
+        mo.spread = x;
+    }
+}
+
+static void seeds_vis(void)
+{
+    uint32_t m[4] = {0, 0, 0, 0};
+    int i;
+    for (i = 0; i < 8; i++)
+        if (kb.seed[i] >= 0)
+            m[kb.seed[i] >> 5] |= 1u << (kb.seed[i] & 31);
+    for (i = 0; i < 4; i++)
+        ms_vis.hold[i] = m[i];
+}
+
+static void seeds_clear(void)
+{
+    int i;
+    for (i = 0; i < 8; i++)
+        kb.seed[i] = -1;
+    seeds_vis();
+}
+
+/* HOLD: a tap plants a note, which then plays now and then by itself in ways chance picks; a second tap takes it out.
+ * The eighth seed makes room by taking the place of the oldest */
 static void hold_toggle(int note, float vel)
 {
-    uint16_t bit = (uint16_t)(1u << (note % 12));
-    if (kb.pool & bit) {
-        if (kb.pool & ~bit)
-            kb.pool &= (uint16_t)~bit;
-    } else {
-        int n = note;
-        while (n > 59)
-            n -= 12;
-        while (n < 48)
-            n += 12;
-        kb.pool |= bit;
-        voice_start(V_PAD, n, 0.35f + 0.25f * vel, SRC_KEYS, (int32_t)(2.5f * MS_SR), 1.0f, 3.5f, frand2() * 0.4f);
-        plant(note);
+    int i, free = -1;
+    for (i = 0; i < 8; i++) {
+        if (kb.seed[i] == note) {
+            kb.seed[i] = -1;
+            seeds_vis();
+            return;
+        }
+        if (kb.seed[i] < 0 && free < 0)
+            free = i;
     }
-    ms_vis.pool = kb.pool;
+    if (free < 0) {
+        for (i = 0; i < 7; i++) {
+            kb.seed[i] = kb.seed[i + 1];
+            kb.seed_t[i] = kb.seed_t[i + 1];
+        }
+        free = 7;
+    }
+    kb.seed[free] = (int8_t)note;
+    kb.seed_t[free] = 0.3f + 0.6f * frand();
+    voice_start(V_BELL, clamp(snap_note(note), 36, 96), 0.3f + 0.3f * vel, SRC_KEYS, (int32_t)(0.5f * MS_SR), 0.005f, 2.0f,
+                frand2() * 0.5f);
+    plant(note);
+    seeds_vis();
+}
+
+/* a seed plays: a pluck in some octave, a little figure, a soft swell or a high sparkle, in some voice */
+static void seed_play(int note)
+{
+    static const uint8_t KIND[4] = {V_BELL, V_KALIMBA, V_SOFTBELL, V_EP};
+    int n = clamp(snap_note(note), 36, 96), kind = KIND[irand(4)];
+    float r = frand(), vel = 0.25f + 0.35f * frand(), pan = frand2() * 0.8f;
+    int32_t gate = (int32_t)((0.3f + 0.9f * frand()) * MS_SR);
+    if (r < 0.45f) {
+        int oct = irand(3) - 1;
+        voice_start(kind, clamp(n + 12 * oct, 36, 96), vel, SRC_KEYS, gate, 0.004f, 1.5f, pan);
+    } else if (r < 0.7f) {
+        int second = frand() < 0.5f ? n + 7 : scale_step(n, frand() < 0.5f ? 1 : -1);
+        voice_start(kind, n, vel, SRC_KEYS, gate, 0.004f, 1.5f, pan);
+        ev_add((int32_t)((0.15f + 0.3f * frand()) * MS_SR), EV_NOTE, kind, clamp(second, 36, 96), vel * 0.8f, SRC_KEYS,
+               gate, -pan);
+    } else if (r < 0.9f) {
+        voice_start(V_PAD, clamp(n - 12, 36, 96), vel * 0.8f, SRC_KEYS, (int32_t)(2.0f * MS_SR), 1.2f, 3.0f, pan);
+    } else {
+        voice_start(V_BELL, clamp(n + 24, 36, 100), vel * 0.6f, SRC_KEYS, gate, 0.002f, 2.5f, pan);
+    }
+}
+
+static void seeds_tick(float dt)
+{
+    int i;
+    if (!kb.hold || !st.playing)
+        return;
+    for (i = 0; i < 8; i++)
+        if (kb.seed[i] >= 0 && (kb.seed_t[i] -= dt) <= 0.0f) {
+            seed_play(kb.seed[i]);
+            kb.seed_t[i] = (1.2f + 4.5f * frand() * frand()) / (1.0f + kb.energy);
+        }
 }
 
 void ms_note_now(int note, int vel)
@@ -2320,12 +2426,10 @@ static void drain(void)
         case C_ROOT:
             st.root = ((c.a % 12) + 12) % 12;
             chord_set(hm.degree);
-            ms_vis.pool = kb.pool = ms_scale_mask(st.mood, st.root);
             break;
         case C_MOOD:
             st.mood = clamp(c.a, 0, MS_NMOODS - 1);
             chord_set(hm.degree);
-            ms_vis.pool = kb.pool = ms_scale_mask(st.mood, st.root);
             break;
         case C_PLAY:
             st.playing = c.a;
@@ -2370,10 +2474,10 @@ static void drain(void)
                 kb.voice = clamp(c.b, 0, 4);
             else {
                 kb.listen = c.b == 1;
-                if (!kb.hold && c.b == 2) {
+                if (!kb.hold && c.b == 2)
                     loop_close(-1);     /* a key held into HOLD would leave its loop note open */
-                    ms_vis.pool = kb.pool = ms_scale_mask(st.mood, st.root);
-                }
+                if (kb.hold != (c.b == 2))
+                    seeds_clear();      /* HOLD starts bare, and leaving it takes its seeds */
                 kb.hold = c.b == 2;
             }
             break;
@@ -2459,6 +2563,9 @@ static void drain(void)
             }
             break;
         }
+        case C_MOTION:
+            motion_set(c.a & 3, c.b);
+            break;
         case C_LOOPFX:
             lfx_set(c.a & 3, clamp(c.b, 0, 100));
             break;
@@ -2655,6 +2762,8 @@ static void control(void)
     fire_events();
     gates();
     loop_tick();
+    seeds_tick(dt);
+    motion_tick(dt);
     kb.energy *= 1.0f - dt / 20.0f;
     if (st.playing && !st.switching) {
         seq.acc -= (float)CTL;
@@ -2726,7 +2835,7 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
                     : st.mode == MODE_DRIFT ? st.layer[2] * 0.7f : st.layer[2];
     ms.crush_n = dust > 0.55f ? 1 + (int)((dust - 0.55f) * 6.0f) : 1;
     for (j = 0; j < 6; j++)
-        lg[j] = j >= SRC_KEYS ? st.layer[j] : st.layer[j] * gf;
+        lg[j] = j >= SRC_KEYS ? st.layer[j] * (st.mode == MODE_LOFI ? 1.6f : 1.0f) : st.layer[j] * gf;   /* LOFI: over the beat */
     if (st.mode == MODE_DRIFT)
         lg[2] = 0.0f;                    /* DRIFT's layer 2 is the bass, outside the voice pool */
     for (i = 0; i < n; i++) {
@@ -2755,15 +2864,22 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             }
             rs_l += s * v->pl * v->rev * send;
             rs_r += s * v->pr * v->rev * send;
-            es += s * v->echo * send;
+            es += s * v->echo * send * (v->layer >= SRC_KEYS ? 2.5f : 1.0f);   /* what you play is what the delay is for */
         }
         if (lb_l != 0.0f || lb_r != 0.0f || lfx.lp_l != 0.0f) {   /* the loop's tape: aged, then driven */
             lfx.lp_l += lfx.age_a * (lb_l - lfx.lp_l);
             lfx.lp_r += lfx.age_a * (lb_r - lfx.lp_r);
             lfx.lp_l = h_flush(lfx.lp_l);
             lfx.lp_r = h_flush(lfx.lp_r);
-            l += lfx.dirt > 0.0f ? soft_tanh(lfx.lp_l * lfx.drive) * lfx.makeup : lfx.lp_l;
-            r += lfx.dirt > 0.0f ? soft_tanh(lfx.lp_r * lfx.drive) * lfx.makeup : lfx.lp_r;
+            lfx.hp_l = h_flush(lfx.hp_l + lfx.age_hp * (lfx.lp_l - lfx.hp_l));
+            lfx.hp_r = h_flush(lfx.hp_r + lfx.age_hp * (lfx.lp_r - lfx.hp_r));
+            x = lfx.lp_l - lfx.hp_l;
+            y = lfx.lp_r - lfx.hp_r;
+            s = 0.5f * (x + y);
+            x = (s + lfx.width * (x - s)) * lfx.wear;
+            y = (s + lfx.width * (y - s)) * lfx.wear;
+            l += lfx.dirt > 0.0f ? soft_tanh(x * lfx.drive) * lfx.makeup : x;
+            r += lfx.dirt > 0.0f ? soft_tanh(y * lfx.drive) * lfx.makeup : y;
         }
         s = bass_tick() * bass_gain * gf;
         l += s;
@@ -2909,7 +3025,7 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
         rs_r += k.echo_to_rev * y;
         /* shimmer feeds the reverb input, never its output, so there is no loop to run away */
         s = k.shimmer > 0.0f && !st.frozen ? shimmer_tick(0.5f * (rs_l + rs_r) * k.rev_mix) * k.shimmer * 2.0f : 0.0f;
-        reverb_tick(rs_l * k.rev_mix + s, rs_r * k.rev_mix + s, st.frozen, &x, &y);
+        reverb_tick(rs_l * (k.rev_mix + mo.rev_boost) + s, rs_r * (k.rev_mix + mo.rev_boost) + s, st.frozen, &x, &y);
         ms.rev_last = 0.5f * (x + y);
         l += x * 0.7f;
         r += y * 0.7f;
@@ -3052,6 +3168,8 @@ void ms_init(void)
     kb.listen = 1;
     for (i = 0; i < 128; i++)
         kb.held[i][0] = kb.held[i][1] = kb.held[i][2] = -1;
+    for (i = 0; i < 8; i++)
+        kb.seed[i] = -1;
     lp.fade = 0.3f;
     lp.mutate = 0.25f;
     lp.smear = 0.3f;
@@ -3096,6 +3214,7 @@ void ms_keys(int i, int v) { post(C_KEYSET, i, v); }
 void ms_loop(int clear) { post(C_LOOP, clear, 0); }
 void ms_loop_set(int i, int v) { post(C_LOOPSET, i, v); }
 void ms_loop_fx(int i, int v) { post(C_LOOPFX, i, v); }
+void ms_motion(int i, int v) { post(C_MOTION, i, v); }
 void ms_fx(int i, int v) { post(C_FX, i, v); }
 void ms_space(int sp) { post(C_SPACE, sp, 0); }
 void ms_beat(int i, int v) { post(C_BEAT, i, v); }

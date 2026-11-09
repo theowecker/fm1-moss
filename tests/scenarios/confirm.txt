@@ -11,7 +11,7 @@ tap LFO
 tap LFO
 tap LFO
 wait 20
-expect page 7
+expect page 9
 turn K4 5 20
 wait 2000
 turn K4 1 20

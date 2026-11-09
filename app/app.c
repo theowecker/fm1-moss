@@ -2,28 +2,32 @@
 /* Part of fm1-base's unity build, included after the platform (gfx.c and announce.c are in scope).
  *
  *   PRESETS  scene (all modes in one list)   ALGORITHM  space   SELECT  page
- *   HOME SEL ENV LFO FX GLO  pages HOME, MIX, KEYS, LOOP, FX, SETUP   K1..K4  the page's knobs
+ *   HOME SEL ENV LFO FX GLO  pages HOME, MIX/BEAT, KEYS, LOOP..LIBRARY, FX/MOTION, SETUP   K1..K4  the page's knobs
  *   ARP  looper (hold: clear)   REC  freeze   EDIT  new variation   PLAY  play/stop   SEQ  scene/studio view
  *   SAVE  save (hold: reset the scene)   OCT- OCT+  keys' octave */
 #include <stddef.h>
 #include "fastmath.h"
 
-#define SET_MAGIC 0x4D4F5333u            /* "MOS3" */
-enum { PG_HOME, PG_MIX, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_FX, PG_SETUP, NPAGES };
+#define SET_MAGIC 0x4D4F5334u            /* "MOS4" */
+/* SELECT walks them in this order: the sound, its rhythm, the keys, the loops, then the setup */
+enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_SETUP, NPAGES };
 enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, NVIEWS };
-static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "BEAT", "KEYS", "LOOP", "SHAPE", "TAPE", "LIBRARY", "FX", "SETUP"};
-static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_FX, B_GLO};
+static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "BEAT", "KEYS", "LOOP", "SHAPE", "TAPE", "LIBRARY",
+                                              "SETUP"};
+static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_GLO};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
 static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"};
 static const char *const TAP_NAME[3] = {"PLAY", "LISTEN", "HOLD"};
 static const char *const SPEED_NAME[5] = {"1/2", "1x", "2x", "REV", "REV 1/2"};
 static const char *const PAGE_KNOBS[NPAGES][4] = {
-    {0}, {0}, {"KIT", "PATTERN", "LEVEL", "BASS"}, {"SNAP", "HARMONY", "VOICE", "TAP"}, {"LAYER 1", "LAYER 2", "LAYER 3", "LAYER 4"},
-    {"FADE", "MUTATE", "SHIFT", "SPEED"}, {"WARBLE", "DIRT", "AGE", "SMEAR"}, {"LOOP", "", "", "DELETE"},
-    {"DELAY", "TIME", "REPEATS", "FILM"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
+    {0}, {0}, {"DELAY", "TIME", "REPEATS", "FILM"}, {"MOD", "RANDOM", "TONE", "SPREAD"}, {"KIT", "PATTERN", "LEVEL", "BASS"},
+    {"SNAP", "HARMONY", "VOICE", "TAP"}, {"LAYER 1", "LAYER 2", "LAYER 3", "LAYER 4"}, {"FADE", "MUTATE", "SHIFT", "SPEED"},
+    {"WARBLE", "DIRT", "AGE", "SMEAR"}, {"LOOP", "", "", "DELETE"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
-static const uint8_t PAGE_STEPS[NPAGES][4] = {{0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {0, 5, 0, 0}, {0}};
+static const uint8_t PAGE_STEPS[NPAGES][4] = {
+    {0}, {0}, {0, 5, 0, 0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {0},
+};
 /* a knob that acts (SAVE, LOAD, ERASE, DELETE) does so once turned right this many detents: an accident takes more
  * than a nudge, and the gauge shows how close it is */
 #define CONFIRM_SHORT 2
@@ -44,9 +48,9 @@ typedef struct {
     uint8_t macro[MS_NMODES][MS_NMACRO];
     uint8_t mix[MS_NMODES][MS_NMIX];
     uint8_t tempo[MS_NMODES], mood[MS_NMODES];
-    uint8_t keys[4], loop[4], fx[4], tape[4];
+    uint8_t keys[4], loop[4], fx[4], tape[4], motion[4];
     uint8_t beat[MS_NMODES][4];          /* kit, pattern, level, bass */
-    uint8_t rsv[8];
+    uint8_t rsv[4];
 } settings_t;
 static settings_t set;
 
@@ -90,6 +94,7 @@ static void settings_defaults(void)
     set.loop[0] = 30, set.loop[1] = 25, set.loop[2] = 30, set.loop[3] = 1;
     set.tape[3] = 30;                     /* SMEAR */
     set.fx[0] = 30, set.fx[1] = 2, set.fx[2] = 45, set.fx[3] = 20;
+    set.motion[0] = 25, set.motion[1] = 20, set.motion[2] = 30, set.motion[3] = 70;
 }
 
 static int knob_ok(int page, int i, int v)
@@ -105,7 +110,7 @@ static int settings_ok(void)
         return 0;
     for (m = 0; m < 4; m++)
         if (!knob_ok(PG_KEYS, m, set.keys[m]) || !knob_ok(PG_SHAPE, m, set.loop[m]) || !knob_ok(PG_FX, m, set.fx[m])
-            || !knob_ok(PG_TAPE, m, set.tape[m]))
+            || !knob_ok(PG_TAPE, m, set.tape[m]) || !knob_ok(PG_MOTION, m, set.motion[m]))
             return 0;
     for (m = 0; m < MS_NMODES * 4; m++)
         if (!knob_ok(PG_BEAT, m % 4, set.beat[m / 4][m % 4]))
@@ -155,6 +160,7 @@ static void send_all(void)
             ms_loop_set(i, set.loop[i]);
         tape_send(i);
         ms_fx(i, set.fx[i]);
+        ms_motion(i, set.motion[i]);
     }
     ms_space(set.space);
     for (i = 0; i < 4; i++)
@@ -281,7 +287,7 @@ void app_say(const char *a, const char *b)
 static uint8_t *page_vals(int page)
 {
     return page == PG_KEYS ? set.keys : page == PG_SHAPE ? set.loop : page == PG_TAPE ? set.tape : page == PG_FX ? set.fx
-         : page == PG_BEAT ? set.beat[set.mode] : 0;
+         : page == PG_MOTION ? set.motion : page == PG_BEAT ? set.beat[set.mode] : 0;
 }
 
 static const char *knob_name(int i)
@@ -449,6 +455,8 @@ static void knob_turn(int i, int32_t d)
             ms_loop_set(i, v[i]);
         else if (set.page == PG_TAPE)
             tape_send(i);
+        else if (set.page == PG_MOTION)
+            ms_motion(i, v[i]);
         else
             ms_fx(i, v[i]);
     } else if (i == 0) {
@@ -465,7 +473,10 @@ static void knob_turn(int i, int32_t d)
         sleep_set(clamp(set.sleep + d, 0, (int)NSLEEP - 1));
     }
     set_dirty = 1;
-    say_knob(i);
+    if (set.page == PG_BEAT && i == 1 && set.beat[m][0] == 0)
+        app_say(MS_PATTERN_NAME[set.beat[m][1]], "PICK A KIT FIRST");
+    else
+        say_knob(i);
 }
 
 static void space_step(int32_t d)
@@ -731,10 +742,8 @@ static void input(void)
         int note = 53 + (int)k + 12 * set.octave;
         if ((keys & bit) && !(ui.keys & bit)) {
             ui.key_note[k] = (uint8_t)note;
-            if (set.keys[3] == 2) {      /* HOLD: say what the tap does before the engine does it */
-                int in = ms_vis.pool >> (note % 12) & 1u, last = in && !(ms_vis.pool & ~(1u << (note % 12)));
-                app_say(MS_NOTE_NAME[note % 12], last ? "STAYS (LAST NOTE)" : in ? "TAKEN AWAY" : "ADDED");
-            }
+            if (set.keys[3] == 2)        /* HOLD: say what the tap does before the engine does it */
+                app_say(MS_NOTE_NAME[note % 12], ms_vis.hold[note >> 5] >> (note & 31) & 1u ? "PULLED" : "PLANTED");
             ms_note(note, 96);
             plat_midi_out(0x09u | 0x90u << 8 | (uint32_t)note << 16 | 96u << 24);
         } else if (!(keys & bit) && (ui.keys & bit)) {
@@ -778,7 +787,7 @@ static void input(void)
             break;
         case B_ENV:                      /* again on the KEYS page: PLAY, LISTEN, HOLD in turn */
             if (set.page == PG_KEYS) {
-                static const char *const HINT[3] = {"KEYS JUST PLAY", "MUSIC FOLLOWS YOU", "ADD OR TAKE AWAY NOTES"};
+                static const char *const HINT[3] = {"KEYS JUST PLAY", "MUSIC FOLLOWS YOU", "TAP TO PLANT A NOTE"};
                 set.keys[3] = (uint8_t)((set.keys[3] + 1u) % 3u);
                 ms_keys(3, set.keys[3]);
                 set_dirty = 1;
@@ -791,7 +800,7 @@ static void input(void)
             page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_TAPE : set.page == PG_TAPE ? PG_LIBRARY : PG_LOOP);
             break;
         case B_FX:
-            page_set(PG_FX);
+            page_set(set.page == PG_FX ? PG_MOTION : PG_FX);
             break;
         case B_GLO:
             page_set(PG_SETUP);
@@ -850,8 +859,8 @@ static void input(void)
         } else {
             uint32_t st = ms_vis.lp_state;
             ui.arp_t = 0;
-            if (set.keys[3] == 2 && st == MS_LOOP_EMPTY)   /* HOLD's notes are switches, not loopable */
-                app_say("HOLD", "KEYS EDIT NOTES");
+            if (set.keys[3] == 2 && st == MS_LOOP_EMPTY)   /* HOLD's notes are planted, not looped */
+                app_say("HOLD", "KEYS PLANT NOTES");
             else if (st == MS_LOOP_EMPTY)
                 app_say("RECORDING", "TAP REC TO LOOP");
             else if (st == MS_LOOP_REC && !ms_vis.lp_n)
@@ -888,7 +897,7 @@ static void input(void)
             uint32_t note = (uint32_t)(53 + (int)k + 12 * set.octave);
             if (mask >> ((53u + k) % 12u) & 1u)
                 chord |= 1u << k;
-            if (set.keys[3] == 2 && (ms_vis.pool >> (note % 12u) & 1u))   /* HOLD: the notes the music plays */
+            if (set.keys[3] == 2 && (ms_vis.hold[note >> 5] >> (note & 31u) & 1u))   /* HOLD: the seeds */
                 held |= 1u << k;
         }
         plat_lights(lit, keys | held, 0, set.keys[3] == 2 ? 0u : chord, 1);
@@ -1002,16 +1011,9 @@ int app_expect(const char *what, int *got)
         *got = set.view;
     else if (!strcmp(what, "tap"))
         *got = set.keys[3];
-    else if (!strcmp(what, "outside")) {   /* recent notes from the music (not the keys) that the HOLD set lacks */
-        int i, n = 0;
-        for (i = 0; i < 16; i++) {
-            uint16_t r = ms_vis.recent[i];
-            if ((r >> 8) != 4u && r && !(ms_vis.pool >> ((r & 0xFFu) % 12u) & 1u))
-                n++;
-        }
-        *got = n;
-    } else if (!strcmp(what, "held"))
-        *got = __builtin_popcount(ms_vis.pool);
+else if (!strcmp(what, "held"))
+        *got = __builtin_popcount(ms_vis.hold[0]) + __builtin_popcount(ms_vis.hold[1]) + __builtin_popcount(ms_vis.hold[2])
+             + __builtin_popcount(ms_vis.hold[3]);
     else if (!strcmp(what, "libcur"))
         *got = ui.lib_cur;
     else if (!strncmp(what, "slot", 4))   /* slotN: how many notes library entry N holds */

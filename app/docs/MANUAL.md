@@ -9,7 +9,8 @@ picks up what you play.
 
 - **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
-- **SELECT** steps through the pages. **K1 to K4** change the page you are on.
+- **SELECT** steps through the pages in order: the sound (HOME, MIX, FX, MOTION), the beat, the keys, the loops
+  (LOOP, SHAPE, TAPE, LIBRARY) and SETUP. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
 - **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
 - **SEQ** steps through the three screens: the picture, the studio and the loops.
@@ -26,7 +27,7 @@ picks up what you play.
 | SEL | The MIX page. Press again for BEAT |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
 | LFO | The LOOP page. Press again for SHAPE, TAPE, then LIBRARY |
-| FX | The FX page |
+| FX | The FX page. Press again for MOTION |
 | GLO | The SETUP page |
 | K1 to K4 | The four knobs of the page you are on |
 | REC | The looper: tap to keep the loop from fading (tap again to let it fade). Hold for a second to clear it. See [Looping](#looping) |
@@ -54,7 +55,7 @@ PRESETS goes through them all in one list: LOFI, then SCAPES, then DRIFT, then b
 on DRIFT Garden.
 
 Each scene sets its own HOME and MIX knobs, tempo, mood and beat. Changing scene loads them. The KEY, the space
-and the KEYS, LOOP, SHAPE and FX pages stay as you set them, whatever the scene.
+and the FX, MOTION, KEYS, SHAPE and TAPE pages stay as you set them, whatever the scene.
 
 To get a scene back to how it started, hold SAVE until the screen says LET GO TO RESET SCENE, then let go. That
 resets its HOME and MIX knobs, tempo, mood and beat.
@@ -90,6 +91,28 @@ The level of each part.
 | SCAPES | NATURE: wind, rain, water, fire | LIFE: birds and crickets | PAD | NOTES |
 | DRIFT | PAD | BELLS | BASS | AIR |
 
+### FX (FX)
+
+![](img/fx-page.png)
+
+| Knob | What it does |
+| --- | --- |
+| DELAY | How much goes into the delay. Low it sits behind the music; past halfway the repeats start to take over |
+| TIME | 1/16 to 1/2, in time with the tempo |
+| REPEATS | How long the echoes last. All the way up they build and smear but don't run away |
+| FILM | Old tape: wobble, hiss, crackle, saturation, a duller top and the odd dropout |
+
+### MOTION (FX again)
+
+What the delay and reverb do over time. Turn DELAY up on the FX page to hear it best.
+
+| Knob | What it does |
+| --- | --- |
+| MOD | Bends the echoes' pitch slowly, from a slight chorus to seasick |
+| RANDOM | Now and then, by chance: the delay jumps to another time for a few seconds (its pitch bends on the way), the echoes swell almost endless for a moment, or the reverb blooms. Higher means more often |
+| TONE | The echoes' colour. Left of noon darker with each repeat, right of noon thinner and brighter |
+| SPREAD | Down, the echoes stay in the middle. Up, they bounce left and right |
+
 ### BEAT (SEL twice)
 
 Drums and a backing bass, in any mode. The LOFI scenes and DRIFT's Garden start with a kit. The others start
@@ -113,6 +136,8 @@ with none.
 | VOICE | The sound of the keys. AUTO uses the mode's own sound |
 | TAP | How the keys play: PLAY, LISTEN or HOLD. Pressing ENV again on this page does the same |
 
+In short: **PLAY** plays. **LISTEN** plays, loops and steers the music. **HOLD** plants notes that play themselves.
+
 **PLAY**: the keys just play.
 
 **LISTEN** (where it starts): the music listens to you.
@@ -126,17 +151,17 @@ with none.
 
 To play over a loop without adding to it, switch TAP to PLAY.
 
-**HOLD**: build the music by adding and taking away notes. The lit keys are the notes the music plays from, which
-starts as the key's scale.
+**HOLD**: grow the music by planting notes. It starts with nothing planted, so you hear the scene on its own.
 
-- Tap a lit key to take that note away. The pads, bells, chords, melody, bass and your loop stop using it and play
-  the nearest note they still have. Take enough away and the music thins to a few notes, or to one drone.
-- Tap a dark key to add that note, even one outside the key. It swells in once, low and soft, so you hear it
-  arrive, and then the music uses it.
-- The last note always stays.
-- Changing KEY or MOOD starts again from that scale.
+- Tap a key to plant its note. It chimes once, then plays by itself every few seconds, a little differently each
+  time: a pluck in some octave, a two-note figure, a low swell or a high sparkle, in a bell, kalimba or piano
+  sound, somewhere left or right.
+- Tap a lit key to pull that note out.
+- Up to eight notes. A ninth replaces the oldest.
+- The lit keys are the notes planted. Leaving HOLD pulls them all.
+- SNAP still applies, so with SCALE or CHORD a planted note fits the key.
 
-In HOLD the keys don't play notes themselves, so there is nothing for REC to loop.
+In HOLD the keys don't loop, so REC has nothing to record.
 
 ### LOOP (LFO)
 
@@ -163,7 +188,7 @@ The loop's own tape. These change only the loop, not the rest of the music.
 | --- | --- |
 | WARBLE | Wobbly pitch, like a stretched tape |
 | DIRT | Saturation, then grit as you turn it up |
-| AGE | Darker and duller, like a worn tape |
+| AGE | A copy of a copy: darker, thinner, narrower and a little quieter |
 | SMEAR | Backwards swells under your notes, and softer, slower repeats |
 
 ### LIBRARY (LFO a fourth time)
@@ -174,17 +199,6 @@ Your last eight loops, kept for you. The LOOPS screen lists them, newest first, 
 | --- | --- |
 | LOOP | Turn to a loop and it starts playing |
 | DELETE | Keep turning right until the gauge fills: that loop is taken out of the library |
-
-### FX
-
-![](img/fx-page.png)
-
-| Knob | What it does |
-| --- | --- |
-| DELAY | How much goes into the delay |
-| TIME | 1/16 to 1/2, in time with the tempo |
-| REPEATS | How long the echoes last |
-| FILM | Old tape: wobble, hiss, crackle, saturation, a duller top and the odd dropout |
 
 ### SETUP (GLO)
 
@@ -276,8 +290,11 @@ MUTATE high.
 
 **Backwards garden**: DRIFT Halo, space REVERSE. SHAPE, SMEAR to 70. Play slowly.
 
-**A drone you build**: any scene, TAP on HOLD (press ENV twice). Take notes away until only two or three are lit,
-then add one outside note and listen to the music bend around it.
+**A garden you plant**: any scene, TAP on HOLD (press ENV twice). Plant three or four keys and leave it. Pull one
+and plant another now and then.
+
+**Echoes that wander**: FX, DELAY to 60 and REPEATS to 70. MOTION, MOD to 50 and RANDOM to 60. Play a few slow
+notes and let the delay move them around.
 
 ## Recording
 

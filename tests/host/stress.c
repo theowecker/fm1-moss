@@ -48,8 +48,10 @@ int main(int argc, char **argv)
                 ms_fx(1, 5);
                 ms_fx(2, 100);
                 ms_fx(3, 100);
+                for (i = 0; i < 4; i++)
+                    ms_motion(i, 100);
                 ms_keys(1, 100);
-                ms_keys(3, 1);
+                ms_keys(3, 1 + (s + sp) % 2);   /* LISTEN or HOLD */
                 ms_loop_set(2, 100);
                 ms_loop_set(3, (sp + s) % 5);
                 ms_beat(0, 1 + (s + sp) % (MS_NKITS - 1));

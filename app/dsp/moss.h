@@ -49,11 +49,12 @@ void ms_sleep_fade(float level);       /* 0..1, applied over the master */
 void ms_panic(void);
 void ms_shed(void);                    /* the render ran late: drop a voice */
 void ms_seed(uint32_t s);
-/* i: 0 snap (FREE, SCALE, CHORD), 1 harmony 0..100, 2 voice (AUTO, EP, BELL, PAD, KALIMBA), 3 PLAY, LISTEN, HOLD (the keys add notes to the music or take them out) */
+/* i: 0 snap (FREE, SCALE, CHORD), 1 harmony 0..100, 2 voice (AUTO, EP, BELL, PAD, KALIMBA), 3 PLAY, LISTEN, HOLD (a tap plants a note that plays by itself) */
 void ms_keys(int i, int v);
 void ms_loop(int clear);               /* 0: advance record, play, overdub, play; 1: clear */
-void ms_loop_set(int i, int v);
-void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
+void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
+void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */
+void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spread, 0..100 */
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */
 void ms_track(int t, int v);           /* loop track 0..3: v 0..100 its level, -1 mute, -3 unmute, -2 clear */
@@ -111,7 +112,7 @@ typedef struct {
     volatile uint16_t recent[16];      /* recent[notes % 16] = note | layer << 8, layer 4 = the keys */
     volatile uint16_t drums[3];        /* the beat: kick, snare, hat steps, bit per sixteenth */
     volatile uint8_t beat_len, beat_step;   /* the pattern's length in sixteenths (12 or 16), where it is */
-    volatile uint16_t pool;            /* HOLD: the pitch classes the music plays from, bit 0 = C */
+    volatile uint32_t hold[4];         /* HOLD: the notes planted, bit per MIDI note */
     volatile uint32_t lp_dots[4];      /* each loop track's notes in 32 time bins */
     volatile uint8_t lp_tracks, lp_mute, lp_track;   /* tracks holding notes and muted (bit each), the one recording */
     volatile uint32_t xfer_seq;

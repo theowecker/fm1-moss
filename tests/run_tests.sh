@@ -22,6 +22,8 @@ run stress sh -c "$CC -O1 -g -fsanitize=address,undefined -fno-sanitize=shift-ba
     && build/render/stress 4"
 run clicks sh -c "$CC -O2 -ffp-contract=off -std=c99 -DPLAT_HOST -Iapp/dsp -Ibase/include \
     -o build/render/clicks tests/host/clicks.c app/dsp/moss.c -lm && build/render/clicks 0.05"
+run knobs sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Wno-unused-function -DPLAT_HOST \
+    -Iapp/dsp -Ibase/include -o build/render/knobs tests/host/knobs.c app/dsp/moss.c -lm && build/render/knobs"
 run host-build sh build.sh --host
 for s in tests/scenarios/*.txt; do
     n=$(basename "$s" .txt)
