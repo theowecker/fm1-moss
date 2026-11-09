@@ -70,11 +70,12 @@ static void studio_header(uint32_t now)
         text_cat(t, ui.msg[1]);
         cv_text(234 - text_w(&FONT_T, t), 25, &FONT_T, t, c565(acc));
     } else if (ms_vis.lp_state != MS_LOOP_EMPTY) {
-        static const char *const ST_NAME[4] = {"", "REC", "LOOP", "ADD"};
+        static const char *const ST_NAME[4] = {"", "REC", "FADING", "ADD"};
         int rec = ms_vis.lp_state == MS_LOOP_REC;
         float pos = rec ? 1.0f : ms_vis.lp_pos;
         uint16_t c = ms_vis.lp_state == MS_LOOP_PLAY ? c565(acc) : RGB(240, 110, 110);
-        cv_text(190 - text_w(&FONT_T, ST_NAME[ms_vis.lp_state]), 25, &FONT_T, ST_NAME[ms_vis.lp_state], c);
+        const char *nm = ms_vis.lp_state == MS_LOOP_PLAY && ms_vis.lp_keep ? "KEPT" : ST_NAME[ms_vis.lp_state];
+        cv_text(190 - text_w(&FONT_T, nm), 25, &FONT_T, nm, c);
         fill(194, 30, 40, 3, ST_LINE);
         fill(194, 30, (int32_t)(40.0f * pos), 3, (rec && (now / 250u & 1u)) ? ST_LINE : c);
     } else if (ui.frozen || !ui.playing) {
@@ -239,64 +240,56 @@ static void studio_knobs(void)
 }
 
 /* the LOOP pages: a lane per track, its notes as dots, the playhead across them */
-static void studio_lanes(uint32_t now)
+/* the LOOPS screen: the loop's four tracks as lanes of dots with the playhead, then the eight slots */
+static void loops_view(uint32_t now)
 {
-    int32_t t, b, x0 = 56, w = 132, px = x0 + (int32_t)((float)w * ms_vis.lp_pos);
+    int32_t t, b, i, x0 = 24, w = 200, px = x0 + (int32_t)((float)w * ms_vis.lp_pos);
     rgb_t acc = MODE_ACCENT[set.mode], bg = CI(16, 18, 28);
-    char n[2] = {0, 0};
+    char n[24], v[8];
     for (t = 0; t < 4; t++) {
-        int32_t y = 56 + t * 26;
-        int used = ms_vis.lp_tracks >> t & 1u, muted = ms_vis.lp_mute >> t & 1u;
+        int32_t y = 52 + t * 15;
+        int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
         int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC) && ms_vis.lp_track == t;
-        if (set.page == PG_LOOP && t == ui.sel_track)
-            pill(40, y - 9, 168, 18, ST_LINE);
         uint16_t c = rec ? RGB(240, 96, 96) : !used ? ST_DIM : muted ? c565(mix(bg, acc, 80)) : c565(acc);
+        if (set.page == PG_LOOP && t == ui.sel_track)
+            pill(4, y - 7, 232, 14, ST_LINE);
         n[0] = (char)('1' + t);
-        cv_text(46, y - 6, &FONT_T, n, c);
+        n[1] = 0;
+        cv_text(10, y - 6, &FONT_T, n, c);
         fill(x0, y, w, 1, ST_LINE);
         for (b = 0; b < 32; b++)
             if (ms_vis.lp_dots[t] >> b & 1u)
                 disc(x0 + 2 + b * (w - 4) / 31, y, muted ? 1 : 2, c);
-        if (muted)
-            cv_text(x0 + w + 4, y - 6, &FONT_T, "M", ST_DIM);
     }
     if (ms_vis.lp_state == MS_LOOP_PLAY || ms_vis.lp_state == MS_LOOP_DUB)
-        fill(px, 44, 1, 92, ST_TEXT);
-    if (ms_vis.lp_state == MS_LOOP_EMPTY)
-        centred(146, &FONT_T, "TAP REC TO RECORD", ST_SOFT);
-    else
-        centred(146, &FONT_T, ms_vis.lp_state == MS_LOOP_PLAY ? "TAP REC TO ADD A TRACK" : ms_vis.lp_state == MS_LOOP_REC ? "TAP REC TO LOOP" : "TAP REC WHEN DONE", ST_SOFT);
-    (void)now;
-}
-
-/* the SLOTS page: the eight slots, what each holds, the one K1 points at */
-static void studio_slots(void)
-{
-    int32_t i;
-    rgb_t acc = MODE_ACCENT[set.mode];
-    char t[24], n[8];
-    for (i = 0; i < NSLOTS; i++) {
-        int32_t y = 44 + i * 13;
+        fill(px, 44, 1, 62, ST_TEXT);
+    centred(108, &FONT_T, ms_vis.lp_state == MS_LOOP_EMPTY ? "TAP REC TO RECORD"
+                          : ms_vis.lp_state == MS_LOOP_PLAY ? (ms_vis.lp_keep ? "KEPT. HOLD REC TO CLEAR" : "FADING. TAP REC TO KEEP")
+                          : ms_vis.lp_state == MS_LOOP_REC ? "TAP REC TO LOOP" : "TAP REC WHEN DONE", ST_SOFT);
+    for (i = 0; i < NSLOTS; i++) {               /* the slots, two columns of four */
+        int32_t x = 6 + (i / 4) * 116, y = 124 + (i % 4) * 12;
         const ms_slot_t *sl = &slots.s[i];
-        if (i == ui.sel_slot)
-            pill(40, y - 1, 168, 13, ST_LINE);
-        int_text(i + 1, n);
-        cv_text(48, y, &FONT_T, n, sl->n ? c565(acc) : ST_DIM);
-        t[0] = 0;
+        if (set.page == PG_SLOTS && i == ui.sel_slot)
+            pill(x - 2, y - 1, 112, 12, ST_LINE);
+        n[0] = (char)('1' + i);
+        n[1] = 0;
+        cv_text(x + 4, y, &FONT_T, n, sl->n ? c565(acc) : ST_DIM);
+        n[0] = 0;
         if (sl->n) {
-            int_text(sl->n, t);
-            text_cat(t, " NOTES  ");
-            int_text(sl->len_ms / 1000u, n);
-            text_cat(t, n);
-            text_cat(t, ".");
-            int_text(sl->len_ms / 100u % 10u, n);
-            text_cat(t, n);
-            text_cat(t, "S");
+            int_text(sl->n, n);
+            text_cat(n, " NOTES ");
+            int_text(sl->len_ms / 1000u, v);
+            text_cat(n, v);
+            text_cat(n, ".");
+            int_text(sl->len_ms / 100u % 10u, v);
+            text_cat(n, v);
+            text_cat(n, "S");
         } else {
-            text_cat(t, "EMPTY");
+            text_cat(n, "EMPTY");
         }
-        cv_text(66, y, &FONT_T, t, sl->n ? ST_TEXT : ST_DIM);
+        cv_text(x + 18, y, &FONT_T, n, sl->n ? ST_TEXT : ST_DIM);
     }
+    (void)now;
 }
 
 static void studio_draw(uint32_t now)
@@ -306,14 +299,13 @@ static void studio_draw(uint32_t now)
     for (half = 0; half < 2; half++) {
         band_begin(half, ST_BG);
         studio_header(now);
-        studio_meters(now);
-        if (set.page == PG_SLOTS)
-            studio_slots();
-        else if (set.page == PG_LOOP || set.page == PG_SHAPE)
-            studio_lanes(now);
-        else
+        if (set.view == VIEW_LOOPS) {
+            loops_view(now);
+        } else {
+            studio_meters(now);
             studio_wheel(now);
-        studio_column(now);
+            studio_column(now);
+        }
         studio_knobs();
         band_end();
     }

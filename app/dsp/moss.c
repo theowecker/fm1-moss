@@ -3,6 +3,10 @@
 #include "fastmath.h"
 #include "plat.h"
 
+/* The render runs from RAM (flash reads through the XIP cache stall it), and RAM code may call only RAM code: its
+ * helpers are folded into it. */
+#define HOT static inline __attribute__((always_inline))
+
 #define CTL 32                         /* frames per control tick (sequencers, events, coefficient updates) */
 #define TWO_PI_SR (FM_TWO_PI / MS_SR)
 
@@ -27,7 +31,7 @@ static const ms_scene_t SCENES[MS_NMODES][MS_MAX_SCENES] = {
     {
         {"STUDY", {55, 45, 35, 40}, {70, 65, 70, 0}, 82, MOOD_MAJOR, 2, 0, 70},
         {"RAINY", {45, 40, 30, 50}, {70, 55, 65, 42}, 72, MOOD_MINOR, 2, 0, 70},
-        {"NIGHT", {38, 35, 45, 60}, {72, 50, 70, 0}, 66, MOOD_DORIAN, 2, 0, 70},
+        {"NIGHT", {32, 30, 40, 72}, {72, 38, 60, 0}, 62, MOOD_MAJOR, 2, 0, 55},
         {"TAPE", {50, 70, 70, 45}, {70, 65, 70, 0}, 86, MOOD_MAJOR, 2, 0, 70},
     },
     {
@@ -77,14 +81,15 @@ typedef struct {
     uint8_t snare_kind, bars_per_chord, mel_kind;
     float swing, mel, hat16;
     int8_t prog[4];
+    float pad;                         /* a warm pad under the piano at this level, 0 none */
 } lofi_style_t;
 
 static const lofi_style_t LOFI_STYLE[] = {
-    {B(0) | B(7) | B(10), B(4) | B(12), B(6) | B(15), 0x5555u, 0, SNARE_FULL, 1, V_EP, 0.22f, 0.10f, 0.25f, {1, 4, 0, 5}},
-    {B(0) | B(10), B(4) | B(12), B(11), 0x5555u, 0, SNARE_RIM, 1, V_EP, 0.18f, 0.06f, 0.10f, {0, 5, 2, 6}},
-    {B(0) | B(10), B(8), B(3) | B(14), 0x5555u, B(6), SNARE_RIM, 2, V_EP, 0.25f, 0.08f, 0.05f, {0, 3, 0, 6}},
+    {B(0) | B(7) | B(10), B(4) | B(12), B(6) | B(15), 0x5555u, 0, SNARE_FULL, 1, V_EP, 0.22f, 0.10f, 0.25f, {1, 4, 0, 5}, 0.0f},
+    {B(0) | B(10), B(4) | B(12), B(11), 0x5555u, 0, SNARE_RIM, 1, V_EP, 0.18f, 0.06f, 0.10f, {0, 5, 2, 6}, 0.0f},
+    {B(0) | B(10), B(8), B(3) | B(14), 0x5555u, B(6), SNARE_RIM, 2, V_EP, 0.25f, 0.06f, 0.05f, {3, 2, 5, 1}, 0.7f},
     {B(0) | B(3) | B(8) | B(10), B(4) | B(12), B(7) | B(15), 0x5555u, 0, SNARE_FULL, 1, V_KALIMBA, 0.28f, 0.16f, 0.45f,
-     {3, 2, 1, 0}},
+     {3, 2, 1, 0}, 0.0f},
 };
 
 typedef struct {
@@ -119,47 +124,55 @@ typedef struct {
     uint8_t loop_len[4];               /* in steps */
     uint8_t step;                      /* sixteenths per step: 4 a quarter, 2 an eighth */
     uint8_t bird;
+    uint8_t lush;                      /* whole chords that crossfade, in place of single breathing notes */
     float chord_time;                  /* how long a chord lasts, against DRIFT's own */
 } drift_style_t;
 
 static const drift_style_t DRIFT_STYLE[] = {
-    {V_BELL, 0.45f, {11, 14, 19, 23}, 4, BIRD_NONE, 1.0f},
-    {V_SOFTBELL, 0.35f, {13, 17, 21, 29}, 4, BIRD_NONE, 1.0f},
-    {V_KALIMBA, 0.55f, {7, 10, 13, 17}, 4, BIRD_NONE, 1.0f},
-    {V_EP, 0.25f, {15, 19, 26, 31}, 4, BIRD_NONE, 1.0f},
-    {V_KALIMBA, 0.65f, {6, 7, 9, 11}, 2, BIRD_SONG, 0.35f},
+    {V_BELL, 0.45f, {11, 14, 19, 23}, 4, BIRD_NONE, 0, 1.0f},
+    {V_SOFTBELL, 0.35f, {13, 17, 21, 29}, 4, BIRD_NONE, 0, 1.0f},
+    {V_KALIMBA, 0.55f, {7, 10, 13, 17}, 4, BIRD_NONE, 0, 1.0f},
+    {V_EP, 0.38f, {15, 19, 26, 31}, 4, BIRD_NONE, 1, 0.3f},
+    {V_KALIMBA, 0.65f, {6, 7, 9, 11}, 2, BIRD_SONG, 0, 0.35f},
 };
 
-#define SN 1024
+#define SN 4096                        /* big enough to read without interpolating */
 static float sint[SN + 1];
 static uint32_t rng = 0x9E3779B9u;
 
-static inline uint32_t rnd(void)
+HOT uint32_t rnd(void)
 {
     rng ^= rng << 13;
     rng ^= rng >> 17;
     rng ^= rng << 5;
     return rng;
 }
-static inline float frand(void) { return (float)(rnd() >> 8) * (1.0f / 16777216.0f); }   /* [0, 1) */
-static inline float frand2(void) { return frand() * 2.0f - 1.0f; }                      /* [-1, 1) */
-static inline int irand(int n) { return (int)(rnd() % (uint32_t)n); }
+HOT float frand(void) { return (float)(rnd() >> 8) * (1.0f / 16777216.0f); }   /* [0, 1) */
+HOT float frand2(void) { return frand() * 2.0f - 1.0f; }                      /* [-1, 1) */
+HOT int irand(int n) { return (int)(rnd() % (uint32_t)n); }
 
-static inline float sin_t(float ph)   /* phase in turns, any value */
+HOT float h_maxf(float a, float b) { return a > b ? a : b; }
+HOT float h_minf(float a, float b) { return a < b ? a : b; }
+HOT float h_fabsf(float x) { return x < 0.0f ? -x : x; }
+HOT float h_clampf(float x, float lo, float hi) { return x < lo ? lo : x > hi ? hi : x; }
+HOT float h_flush(float x) { return h_fabsf(x) < 1e-20f ? 0.0f : x; }
+
+HOT float soft_tanh(float x)
 {
-    float x;
-    int32_t i;
-    ph -= (float)(int32_t)ph;
-    if (ph < 0.0f)
-        ph += 1.0f;
-    x = ph * (float)SN;
-    i = (int32_t)x;
-    if (i >= SN)                         /* ph a hair under 0 rounds up to exactly 1 */
-        i = SN - 1;
-    return sint[i] + (x - (float)i) * (sint[i + 1] - sint[i]);
+    if (x > 3.0f)
+        return 1.0f;
+    if (x < -3.0f)
+        return -1.0f;
+    return x * (27.0f + x * x) / (27.0f + 9.0f * x * x);
 }
 
-static inline float wrap1(float ph) { return ph >= 1.0f ? ph - 1.0f : ph; }
+HOT float sin_t(float ph)   /* phase in turns, any value */
+{
+    /* the mask wraps any phase, negative ones too (truncation there is off by one entry: 1/4096 of a turn) */
+    return sint[(uint32_t)(int32_t)(ph * (float)SN) & (SN - 1u)];
+}
+
+HOT float wrap1(float ph) { return ph >= 1.0f ? ph - 1.0f : ph; }
 static float mtof(float n) { return 440.0f * fm_exp2f((n - 69.0f) * (1.0f / 12.0f)); }
 static float decay_mul(float secs) { return fm_expf(-6.9f / (fm_maxf(secs, 0.0005f) * MS_SR)); }   /* -60 dB in secs */
 static float onepole_a(float fc) { return 1.0f - fm_expf(-FM_TWO_PI * fc / MS_SR); }
@@ -176,7 +189,7 @@ static void svf_set(svf_t *f, float fc, float q)
     f->a2 = g * f->a1;
     f->a3 = g * f->a2;
 }
-static inline float svf_run(svf_t *f, float v0, float *bp)
+HOT float svf_run(svf_t *f, float v0, float *bp)
 {
     float v3 = v0 - f->ic2, v1 = f->a1 * f->ic1 + f->a2 * v3, v2 = f->ic2 + f->a2 * f->ic1 + f->a3 * v3;
     f->ic1 = 2.0f * v1 - f->ic1;
@@ -184,12 +197,12 @@ static inline float svf_run(svf_t *f, float v0, float *bp)
     *bp = v1;
     return v2;
 }
-static inline float svf_lp(svf_t *f, float v0)
+HOT float svf_lp(svf_t *f, float v0)
 {
     float bp;
     return svf_run(f, v0, &bp);
 }
-static inline float svf_bp(svf_t *f, float v0)
+HOT float svf_bp(svf_t *f, float v0)
 {
     float bp;
     svf_run(f, v0, &bp);
@@ -204,7 +217,7 @@ static void pan_gains(float pan, float *l, float *r)   /* equal power, pan -1..1
 }
 
 enum { C_MODE, C_MACRO, C_MIX, C_TEMPO, C_ROOT, C_MOOD, C_PLAY, C_FREEZE, C_NEW, C_NOTE, C_PANIC, C_SEED, C_SHED, C_KEYSET,
-       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD };
+       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX };
 typedef struct {
     uint8_t type;
     int16_t a, b;
@@ -265,6 +278,7 @@ static struct {
     float rain_tone;
     float pad_bright;
     float film;
+    float crush_bits;                  /* LOFI's DUST past 0.4: the levels the bit crusher keeps, 0 off */
     float shimmer, echo_wow, echo_to_rev, rev_mod, damp_hz, reverse;
 } k;
 
@@ -326,7 +340,7 @@ static int scale_note_near(int deg, int centre)
 }
 
 enum { ST_OFF, ST_ATK, ST_DEC, ST_REL };
-#define NV 24
+#define NV 14
 #define SRC_KEYS 4
 #define SRC_LOOP 5
 typedef struct {
@@ -357,9 +371,48 @@ static void voice_cut(voice_t *v)
     v->out_l = v->out_r = 0.0f;
 }
 
-static voice_t *voice_alloc(void)
+/* the loop's own tape: WARBLE bends its pitch, DIRT drives it, AGE darkens it, SEND feeds the reverb and delay */
+static struct {
+    float warble, dirt, age, send;
+    float wmul, wph, wph2;             /* the pitch bend now, its two slow phases */
+    float age_a, drive, makeup;
+    float lp_l, lp_r;
+} lfx = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f};
+
+static void lfx_set(int i, int v)
 {
-    int i, best = -1;
+    float x = (float)v * 0.01f;
+    if (i == 0)
+        lfx.warble = x;
+    else if (i == 1)
+        lfx.dirt = x;
+    else if (i == 2)
+        lfx.age = x;
+    else
+        lfx.send = 2.0f * x;
+    lfx.age_a = onepole_a(14000.0f * fm_exp2f(-3.5f * lfx.age));
+    lfx.drive = 1.0f + 7.0f * lfx.dirt;
+    lfx.makeup = 1.0f / (1.0f + 2.5f * lfx.dirt);
+}
+
+#define ENGINE_MAX 10                  /* the music's own voices at most: the rest are kept for the player */
+
+static voice_t *voice_alloc(int layer)
+{
+    int i, best = -1, busy = 0;
+    if (layer < SRC_KEYS) {              /* past its share, the music takes over its own quietest voice */
+        for (i = 0; i < NV; i++)
+            if (vo[i].stage != ST_OFF && vo[i].layer < SRC_KEYS)
+                busy++;
+        if (busy >= ENGINE_MAX) {
+            for (i = 0; i < NV; i++)
+                if (vo[i].stage != ST_OFF && vo[i].layer < SRC_KEYS
+                    && (best < 0 || vo[i].env * vo[i].amp < vo[best].env * vo[best].amp))
+                    best = i;
+            voice_cut(&vo[best]);
+            return &vo[best];
+        }
+    }
     for (i = 0; i < NV; i++)
         if (vo[i].stage == ST_OFF)
             return &vo[i];
@@ -399,7 +452,7 @@ static voice_t *voice_start(int kind, int note, float vel, int layer, int32_t ga
     voice_t *v;
     if (layer != SRC_KEYS)
         note = pool_fit(note);
-    v = voice_alloc();
+    v = voice_alloc(layer);
     float f = mtof((float)note), bright;
     v->kind = (uint8_t)kind;
     v->note = (int8_t)note;
@@ -458,7 +511,7 @@ static voice_t *voice_start(int kind, int note, float vel, int layer, int32_t ga
         v->idx_floor = 0.0f;
         v->idx_mul = decay_mul(0.18f);
         v->s_lvl = 0.0f;
-        v->d_mul = decay_mul(1.8f);
+        v->d_mul = decay_mul(1.3f);
         v->amp = 0.16f * (0.35f + 0.65f * vel);
         v->lp_a = onepole_a(5000.0f);
         v->rev = 0.5f;
@@ -486,7 +539,7 @@ static void voices_release(int keep_keys)
             vo[i].stage = ST_REL;
 }
 
-static inline float voice_tick(voice_t *v)
+HOT float voice_tick(voice_t *v, float wm)
 {
     float s, m;
     switch (v->stage) {
@@ -510,15 +563,15 @@ static inline float voice_tick(voice_t *v)
     default:
         return 0.0f;
     }
-    v->pc = wrap1(v->pc + v->ic);
+    v->pc = wrap1(v->pc + v->ic * wm);
     if (v->kind == V_PAD) {
         /* two detuned feedback-FM oscillators, a soft saw */
-        v->pc2 = wrap1(v->pc2 + v->ic2);
+        v->pc2 = wrap1(v->pc2 + v->ic2 * wm);
         v->fb1 = sin_t(v->pc + 0.11f * v->fb1);
         v->fb2 = sin_t(v->pc2 + 0.11f * v->fb2);
         s = 0.5f * (v->fb1 + v->fb2);
     } else {
-        v->pm = wrap1(v->pm + v->im);
+        v->pm = wrap1(v->pm + v->im * wm);
         v->idx = v->idx_floor + (v->idx - v->idx_floor) * v->idx_mul;
         m = sin_t(v->pm);
         s = sin_t(v->pc + v->idx * m);
@@ -547,7 +600,7 @@ static void bass_note(int note, float vel, int32_t gate, float glide_secs, float
     bass.gate = gate;
 }
 
-static inline float bass_tick(void)
+HOT float bass_tick(void)
 {
     if (bass.env < 0.0002f && bass.env_target == 0.0f)
         return 0.0f;
@@ -655,7 +708,7 @@ static struct {
     int snare_kind;
 } dr;
 
-static const kit_t *kit(void) { return &KITS[clamp(bt.kit, 1, KIT_N - 1)]; }
+HOT const kit_t *kit(void) { return &KITS[clamp(bt.kit, 1, KIT_N - 1)]; }
 
 static void drum_kick(float vel)
 {
@@ -701,7 +754,7 @@ static void drum_perc(float vel, float pitch)
     dr.p_mul = decay_mul(kt->p_dec);
 }
 
-static inline void drums_tick(float n, float *l, float *r)
+HOT void drums_tick(float n, float *l, float *r)
 {
     float k = 0.0f, s = 0.0f, h = 0.0f, x;
     if (dr.k_amp > 0.0001f) {
@@ -731,7 +784,7 @@ static inline void drums_tick(float n, float *l, float *r)
         h += sin_t(dr.p_pc + dr.p_idx * sin_t(dr.p_pm)) * dr.p_amp;
         dr.p_amp *= dr.p_mul;
     }
-    x = fm_tanhf(1.4f * k) * 0.75f;
+    x = soft_tanh(1.4f * k) * 0.75f;
     dr.bus_lp += kit()->bus * (x + s + h - dr.bus_lp);   /* dull the kit, as if sampled */
     *l = dr.bus_lp - 0.1f * s - 0.25f * h;
     *r = dr.bus_lp + 0.1f * s + 0.25f * h;
@@ -809,7 +862,7 @@ typedef struct {
 } bird_t;
 static bird_t bd[NBIRD];
 
-static void bird_syllable(bird_t *b)
+HOT void bird_syllable(bird_t *b)
 {
     float f, f_end, dur;
     int type;
@@ -889,7 +942,7 @@ static void bird_song(bird_t *b)
     bird_syllable(b);
 }
 
-static int32_t bird_wait(void)
+HOT int32_t bird_wait(void)
 {
     float per_min = k.bird_rate * (1.0f + 2.0f * kb.energy), secs;
     if (per_min <= 0.01f)
@@ -898,7 +951,7 @@ static int32_t bird_wait(void)
     return (int32_t)(secs * MS_SR);
 }
 
-static inline void bird_tick(bird_t *b, float *l, float *r)
+HOT void bird_tick(bird_t *b, float *l, float *r)
 {
     float env, s;
     if (!b->syl_left)
@@ -955,7 +1008,7 @@ static void crickets_init(int n)
     }
 }
 
-static inline void cricket_tick(cricket_t *c, float life, float *l, float *r)
+HOT void cricket_tick(cricket_t *c, float life, float *l, float *r)
 {
     float env, s;
     if (c->pulses <= 0) {
@@ -1001,7 +1054,7 @@ static struct {
     float lenf[NLINE];                 /* the length read now, gliding to len */
     float *ap[4];
     uint32_t apw[4];
-    float mod_ph;
+    float mod_ph, mod_m;               /* its slow modulation, moved once a control tick */
 } rv;
 
 #define WOB_N 1024
@@ -1016,7 +1069,8 @@ static struct {
     float peak;
     float sleep;
     float dc_l, dc_r, mode_gain;
-    float rev_last, drop_t, drop_g, wob_s, film_s;
+    float rev_last, drop_t, drop_g, wob_s, film_s, wob_wf;
+    uint32_t sm_quiet;                 /* samples since anything went into the smear */
     float drum_l, drum_r;               /* the kit's last sample, for the declick when KIT goes OFF */
 } ms;
 
@@ -1052,7 +1106,7 @@ static void fx_clear(void)
         wob_l[i] = wob_r[i] = 0.0f;
 }
 
-static inline int16_t to16(float x)
+HOT int16_t to16(float x)
 {
     x *= 32767.0f;
     return (int16_t)(x > 32767.0f ? 32767 : x < -32767.0f ? -32767 : (int32_t)x);
@@ -1060,12 +1114,12 @@ static inline int16_t to16(float x)
 
 static float wow_ph, flutter_ph, wob_drift, wob_drift_to, wob_drift_t;
 
-static inline void echo_tick(float in, float *l, float *r)
+HOT void echo_tick(float in, float *l, float *r)
 {
     float len, pos, fr, a, b, dl, dr2, wl, wr;
     int32_t i0;
     echo_len += 0.00005f * (echo_len_target - echo_len);   /* time changes glide, like tape */
-    len = fm_minf(echo_len * (1.0f + k.echo_wow * sin_t(wow_ph)), (float)(ECHO_N - 4));
+    len = h_minf(echo_len * (1.0f + k.echo_wow * sin_t(wow_ph)), (float)(ECHO_N - 4));
     pos = (float)echo_w + (echo_half ? 0.5f : 0.0f) - len;
     if (pos < 0.0f)
         pos += (float)ECHO_N;
@@ -1082,7 +1136,7 @@ static inline void echo_tick(float in, float *l, float *r)
     echo_lp_l += 0.25f * (dl - echo_lp_l);
     echo_lp_r += 0.25f * (dr2 - echo_lp_r);
     /* ping-pong: input enters left, repeats cross over; pairs of samples are averaged into one stored */
-    wl = fm_tanhf(in + k.echo_fb * echo_lp_r);
+    wl = soft_tanh(in + k.echo_fb * echo_lp_r);
     wr = k.echo_fb * echo_lp_l;
     if (echo_half) {
         echo_l[echo_w] = to16(0.5f * (echo_hold_l + wl));
@@ -1097,7 +1151,7 @@ static inline void echo_tick(float in, float *l, float *r)
     *r = dr2;
 }
 
-static inline float ap_run(int i, float x, float g)
+HOT float ap_run(int i, float x, float g)
 {
     float *buf = rv.ap[i], d = buf[rv.apw[i]], y = d - g * x;
     buf[rv.apw[i]] = x + g * y;
@@ -1106,7 +1160,7 @@ static inline float ap_run(int i, float x, float g)
     return y;
 }
 
-static inline float line_read(int i, float extra)
+HOT float line_read(int i, float extra)
 {
     float pos, fr, a, b;
     rv.lenf[i] += 0.0002f * ((float)rv.len[i] - rv.lenf[i]);   /* ~0.1 s: a size change bends, never jumps */
@@ -1123,12 +1177,11 @@ static inline float line_read(int i, float extra)
     return a + fr * (b - a);
 }
 
-static inline void reverb_tick(float inl, float inr, int frozen, float *l, float *r)
+HOT void reverb_tick(float inl, float inr, int frozen, float *l, float *r)
 {
     float d[NLINE], x, m, h0, h1, h2, h3, in;
     int i;
-    rv.mod_ph = wrap1(rv.mod_ph + 0.37f / MS_SR);
-    m = sin_t(rv.mod_ph);
+    m = rv.mod_m;
     d[0] = line_read(0, 8.0f + 7.0f * k.rev_mod * m);
     d[1] = line_read(1, 0.0f);
     d[2] = line_read(2, 8.0f - 7.0f * k.rev_mod * m);
@@ -1145,10 +1198,10 @@ static inline void reverb_tick(float inl, float inr, int frozen, float *l, float
     h1 = 0.5f * (rv.lp[0] - rv.lp[1] + rv.lp[2] - rv.lp[3]);
     h2 = 0.5f * (rv.lp[0] + rv.lp[1] - rv.lp[2] - rv.lp[3]);
     h3 = 0.5f * (rv.lp[0] - rv.lp[1] - rv.lp[2] + rv.lp[3]);
-    rv.line[0][rv.w[0]] = fm_flush(h0 * rv.g[0] + x + (frozen ? 0.0f : 0.15f * inl));
-    rv.line[1][rv.w[1]] = fm_flush(h1 * rv.g[1] + x);
-    rv.line[2][rv.w[2]] = fm_flush(h2 * rv.g[2] + x + (frozen ? 0.0f : 0.15f * inr));
-    rv.line[3][rv.w[3]] = fm_flush(h3 * rv.g[3] + x);
+    rv.line[0][rv.w[0]] = h_flush(h0 * rv.g[0] + x + (frozen ? 0.0f : 0.15f * inl));
+    rv.line[1][rv.w[1]] = h_flush(h1 * rv.g[1] + x);
+    rv.line[2][rv.w[2]] = h_flush(h2 * rv.g[2] + x + (frozen ? 0.0f : 0.15f * inr));
+    rv.line[3][rv.w[3]] = h_flush(h3 * rv.g[3] + x);
     for (i = 0; i < NLINE; i++)
         if (++rv.w[i] >= (uint32_t)(LINE_LEN[i] + LINE_PAD))
             rv.w[i] = 0;
@@ -1208,6 +1261,20 @@ static float step_len(void)   /* a sixteenth; swing lengthens even steps and sho
 {
     float len = 60.0f / (float)st.tempo / 4.0f * MS_SR, sw = beat_swing();
     return (seq.step & 1u) ? len * (1.0f - sw) : len * (1.0f + sw);
+}
+
+/* the pad under LOFI's piano: the root and fifth low, the ninth high, swelling in and fading out under the next */
+static void lofi_pad(float level)
+{
+    static const int8_t TONE[3] = {0, 2, 4};
+    static const int8_t CENTRE[3] = {45, 52, 74};
+    int i;
+    for (i = 0; i < NV; i++)
+        if (vo[i].kind == V_PAD && vo[i].layer == 0 && (vo[i].stage == ST_ATK || vo[i].stage == ST_DEC))
+            vo[i].stage = ST_REL;
+    for (i = 0; i < 3; i++)
+        voice_start(V_PAD, chord_note_near(TONE[i], CENTRE[i]), level * (i == 2 ? 0.5f : 0.8f), 0, -1, 1.5f, 3.5f,
+                    (float)(i - 1) * 0.5f);
 }
 
 static void lofi_chord_hit(float vel, int ntones, int32_t gate)
@@ -1296,8 +1363,11 @@ static void lofi_step(void)
             hm.prog_i = (hm.prog_i + 1) & 3;
             chord_set(ls->prog[hm.prog_i]);
         }
-        if (hm.bar_in_chord == 0)
-            lofi_chord_hit(0.75f, 4, (int32_t)(sixteenth * (float)(10 * ls->bars_per_chord)));
+        if (hm.bar_in_chord == 0) {
+            lofi_chord_hit(ls->pad > 0.0f ? 0.6f : 0.75f, 4, (int32_t)(sixteenth * (float)(10 * ls->bars_per_chord)));
+            if (ls->pad > 0.0f)
+                lofi_pad(ls->pad);
+        }
         else
             lofi_chord_hit(0.55f, 3, (int32_t)(sixteenth * 8.0f));
         if (bt.bass == BASS_AUTO)
@@ -1417,6 +1487,20 @@ static void drift_regrow(void)
     }
 }
 
+/* a lush chord: root low, then fifth, seventh, third and ninth spread wide; the last one fades out under it */
+static void lush_chord(void)
+{
+    static const int8_t TONE[5] = {0, 2, 3, 1, 4};
+    static const int8_t CENTRE[5] = {45, 52, 58, 64, 69};
+    int i;
+    for (i = 0; i < NV; i++)
+        if (vo[i].kind == V_PAD && vo[i].layer == 0 && (vo[i].stage == ST_ATK || vo[i].stage == ST_DEC))
+            vo[i].stage = ST_REL;
+    for (i = 0; i < 5; i++)
+        voice_start(V_PAD, chord_note_near(TONE[i], CENTRE[i]), i == 0 ? 0.6f : 0.45f, 0, -1, 4.0f, 7.0f,
+                    (float)(i - 2) * 0.35f);
+}
+
 static void drift_next_chord(void)
 {
     static const int8_t MOVE[] = {3, 4, -3, 2, 5, -2, 3, 4};   /* mostly fourths and fifths, sometimes thirds */
@@ -1424,6 +1508,8 @@ static void drift_next_chord(void)
     hm.pending = -1;
     if (bt.bass == BASS_AUTO)
         bass_note(36 + ((st.root + hm.tones[0]) % 12), 0.8f, -1, 1.6f, 2.5f);
+    if (DRIFT_STYLE[st.scene].lush)
+        lush_chord();
     seq.chord_t = (150.0f - 135.0f * k.drift) * (0.7f + 0.6f * frand()) * DRIFT_STYLE[st.scene].chord_time;
 }
 
@@ -1458,6 +1544,11 @@ static void drift_step(void)   /* every quarter note */
 static void drift_pads(float dt)
 {
     int i;
+    if (DRIFT_STYLE[st.scene].lush) {    /* the chord is the pad: it breathes as a whole */
+        for (i = 0; i < 4; i++)
+            ms_vis.pad[i] = 0.5f;
+        return;
+    }
     for (i = 0; i < 4; i++) {
         float c;
         dg.cyc_t[i] -= dt;
@@ -1518,7 +1609,7 @@ static void apply(void)
         k.reverse = 0.6f;
         break;
     }
-    k.dust = k.wobble = k.weather = k.life = k.density = k.drift = 0.0f;
+    k.dust = k.wobble = k.weather = k.life = k.density = k.drift = k.crush_bits = 0.0f;
     k.wind = k.rain = k.surf = k.creek = k.fire = k.thunder_rate = k.bird_rate = k.note_rate = 0.0f;
     k.rain_tone = 6500.0f;
     k.pad_bright = 0.4f;
@@ -1528,6 +1619,7 @@ static void apply(void)
     case MODE_LOFI:
         k.dust = u(st.macro[1]);
         k.wobble = u(st.macro[2]);
+        k.crush_bits = k.dust > 0.4f ? fm_exp2f(15.0f - 6.0f * (k.dust - 0.4f) / 0.6f) : 0.0f;
         k.rain = st.mix[3] ? 0.55f : 0.0f;
         k.rain_tone = 5000.0f;
         break;
@@ -1599,7 +1691,9 @@ static void mode_start(void)
         drift_regrow();
         if (bt.bass == BASS_AUTO)
             bass_note(36 + st.root % 12, 0.8f, -1, 1.6f, 3.0f);
-        seq.chord_t = 40.0f;
+        if (DRIFT_STYLE[st.scene].lush)
+            lush_chord();
+        seq.chord_t = DRIFT_STYLE[st.scene].lush ? 20.0f : 40.0f;
         break;
     }
     if (st.mode != MODE_SCAPES) {
@@ -1642,14 +1736,14 @@ static struct {
     uint32_t w, age[2];
 } sh = {0, {0, SH_G / 2}};
 
-static inline float shimmer_tick(float in)
+HOT float shimmer_tick(float in)
 {
     float o = 0.0f;
     int g;
     sh_buf[sh.w] = to16(in);
     for (g = 0; g < 2; g++) {
         uint32_t a = sh.age[g];
-        float w = sin_t(0.5f * (float)a / (float)SH_G);
+        float t = (float)a * (1.0f / (float)SH_G), w = 4.0f * t * (1.0f - t);
         o += (float)sh_buf[(sh.w - (2u * SH_G - a)) & (SH_N - 1)] * (1.0f / 32767.0f) * w * w;
         if (++sh.age[g] >= SH_G)
             sh.age[g] = 0;
@@ -1733,6 +1827,10 @@ static struct {
     int autorec;                       /* LISTEN started the recording, so a pause closes it */
     float quiet;                       /* samples since the last key event */
     int track;                         /* where new notes go, 0..3 */
+    int keep;                          /* REC kept it: it no longer fades */
+    int synced;                        /* a beat to follow: the loop is whole bars and its notes sit on the groove */
+    float rec_off;                     /* where in the bar the recording began, samples */
+    float rec_end;                     /* the clock when it closed, before a quiet tail was cut */
     uint32_t mute;                     /* bit per track */
     float tgain[4];
 } lp;
@@ -1755,6 +1853,28 @@ static const float LOOP_RATE[5] = {0.5f, 1.0f, 2.0f, 1.0f, 0.5f};   /* speeds 3 
 
 static float loop_now(void) { return lp.state == LP_REC ? lp.pos : lp.u; }
 
+static float sixteenth_len(void) { return 60.0f / (float)st.tempo / 4.0f * MS_SR; }
+
+/* where in the bar the music is now, samples */
+static float bar_pos(void)
+{
+    float six = sixteenth_len();
+    uint32_t cur = seq.step ? seq.step - 1u : 0u;
+    return (float)(cur & 15u) * six + fm_clampf(six - seq.acc, 0.0f, six);
+}
+
+/* the nearest point of the groove's grid: sixteenths in pairs, the second one late by the swing */
+static float groove_snap(float t)
+{
+    float six = sixteenth_len(), pair = 2.0f * six, base = fm_floorf(t / pair) * pair, in = t - base;
+    float late = six * (1.0f + beat_swing()), best = 0.0f;
+    if (fm_fabsf(in - late) < fm_fabsf(in - best))
+        best = late;
+    if (fm_fabsf(in - pair) < fm_fabsf(in - best))
+        best = pair;
+    return base + best;
+}
+
 static void loop_add(int note, float vel)
 {
     lev_t *e;
@@ -1770,6 +1890,11 @@ static void loop_add(int note, float vel)
         e = &lp.ev[lp.n++];
     }
     e->t = loop_now();
+    if (lp.synced && lp.state != LP_REC) {   /* an overdub lands on the groove; a recording is placed when it closes */
+        e->t = groove_snap(e->t);
+        if (e->t >= lp.len)
+            e->t -= lp.len;
+    }
     e->dur = 0.0f;
     e->vel = vel;
     e->note = (int8_t)note;
@@ -1804,6 +1929,11 @@ static void loop_tap(void)
         lp.pos = 0.0f;
         lp.track = 0;
         lp.mute = 0;
+        lp.keep = 0;
+        ms_vis.lp_keep = 0;
+        lp.synced = st.playing && (st.mode == MODE_LOFI || bt.kit != KIT_OFF);
+        lp.rec_off = lp.synced ? bar_pos() : 0.0f;
+        lp.rec_end = -1.0f;
         lp.state = LP_REC;
         break;
     case LP_REC:
@@ -1812,11 +1942,24 @@ static void loop_tap(void)
             lp.state = LP_EMPTY;
             break;
         }
-        t0 = lp.ev[0].t;                 /* trim the silence before the first note */
-        for (i = 0; i < lp.n; i++)
-            lp.ev[i].t -= t0;
-        lp.len = fm_maxf(lp.pos - t0, (lp.autorec ? 2.5f : 0.3f) * MS_SR);
-        lp.u = 0.0f;
+        if (lp.synced) {                 /* whole bars from the bar it began in, notes on the groove, in step now */
+            float bar = 16.0f * sixteenth_len(), end = lp.pos + lp.rec_off, now = (lp.rec_end >= 0.0f ? lp.rec_end : lp.pos) + lp.rec_off;
+            int bars = 1;
+            while ((float)bars * bar < end - 0.25f * bar && bars < 8 && (float)(bars * 2) * bar <= LOOP_MAX_S * MS_SR)
+                bars *= 2;
+            lp.len = (float)bars * bar;
+            for (i = 0; i < lp.n; i++) {
+                float t = groove_snap(lp.ev[i].t + lp.rec_off);
+                lp.ev[i].t = t - fm_floorf(t / lp.len) * lp.len;
+            }
+            lp.u = now - fm_floorf(now / lp.len) * lp.len;
+        } else {
+            t0 = lp.ev[0].t;             /* free time: trim the silence before the first note */
+            for (i = 0; i < lp.n; i++)
+                lp.ev[i].t -= t0;
+            lp.len = fm_maxf(lp.pos - t0, (lp.autorec ? 2.5f : 0.3f) * MS_SR);
+            lp.u = 0.0f;
+        }
         lp.autorec = 0;
         lp.state = LP_PLAY;
         break;
@@ -1840,7 +1983,7 @@ static void loop_pass(void)
             lp.ev[kept++] = e;
             continue;
         }
-        if (lp.state == LP_PLAY && !(lp.mute >> e.track & 1u))
+        if (lp.state == LP_PLAY && !lp.keep && !(lp.mute >> e.track & 1u))
             e.vel *= 1.0f - 0.45f * lp.fade;
         if (frand() < lp.mutate * 0.5f) {
             float r = frand();
@@ -1952,6 +2095,7 @@ static void loop_tick(void)
         for (i = 0; i < lp.n; i++)
             open |= lp.ev[i].open;
         if (lp.autorec && !open && lp.quiet > 2.0f * MS_SR) {   /* a pause ends the phrase */
+            lp.rec_end = lp.pos;
             lp.pos -= lp.quiet - 0.8f * MS_SR;
             loop_tap();
         } else if (lp.pos > LOOP_MAX_S * MS_SR) {
@@ -2129,13 +2273,13 @@ static struct {
     float fb;
 } sm;
 
-static inline void smear_tick(float in, float *l, float *r)
+HOT void smear_tick(float in, float *l, float *r)
 {
     float o[2];
     int g;
     sm_buf[sm.w] = to16(in + sm.fb);
     for (g = 0; g < 2; g++) {
-        float w = sin_t(0.5f * (float)sm.age[g] / (float)SM_G);
+        float a = (float)sm.age[g] * (1.0f / (float)SM_G), w = 4.0f * a * (1.0f - a);
         o[g] = (float)sm_buf[(sm.start[g] - sm.age[g]) & (SM_N - 1)] * (1.0f / 32767.0f) * w * w;
         if (++sm.age[g] >= SM_G) {
             sm.age[g] = 0;
@@ -2265,9 +2409,13 @@ static void drain(void)
                 lp.n = 0;
                 lp.autorec = 0;
                 lp.mute = 0;
+                lp.keep = 0;
+            } else if (lp.state == LP_PLAY) {
+                lp.keep = !lp.keep;
             } else {
-                loop_tap();
+                loop_tap();                  /* empty: record by hand; recording: close it; adding: done */
             }
+            ms_vis.lp_keep = (uint8_t)lp.keep;
             break;
         case C_SNAP:
             loop_snap();
@@ -2291,6 +2439,13 @@ static void drain(void)
                     lp.mute |= 1u << t;
             } else if (c.b == -3) {
                 lp.mute &= ~(1u << t);
+            } else if (c.b == -4 || c.b == -5) {
+                float d = c.b == -4 ? sixteenth_len() : -sixteenth_len();
+                for (i = 0; i < lp.n; i++)
+                    if (lp.ev[i].track == t && lp.len > 0.0f) {
+                        float x = lp.ev[i].t + d;
+                        lp.ev[i].t = x - fm_floorf(x / lp.len) * lp.len;
+                    }
             } else {
                 for (i = 0; i < lp.n; i++)
                     if (lp.ev[i].track != t)
@@ -2302,6 +2457,9 @@ static void drain(void)
             }
             break;
         }
+        case C_LOOPFX:
+            lfx_set(c.a & 3, clamp(c.b, 0, 100));
+            break;
         case C_LOOPSET:
             if (c.a == 0)
                 lp.fade = u(clamp(c.b, 0, 100));
@@ -2539,7 +2697,7 @@ static void control(void)
     ms_vis.frozen = (uint8_t)st.frozen;
 }
 
-static float wob_read(float *buf, float delay)
+HOT float wob_read(float *buf, float delay)
 {
     float pos = (float)wob_w - delay, fr;
     int32_t i0;
@@ -2551,13 +2709,13 @@ static float wob_read(float *buf, float delay)
     return buf[i0] + fr * (buf[(i0 + 1) & (WOB_N - 1)] - buf[i0]);
 }
 
-static void render_block(float *out_l, float *out_r, uint32_t n)
+PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
 {
     uint32_t i;
     int j;
-    float gf = st.gen_fade, wob_target = fm_maxf(st.mode == MODE_LOFI ? k.wobble : 0.0f, 0.75f * k.film), wob_depth;
-    float lg[6], dust = st.mode == MODE_LOFI ? k.dust : 0.0f, noise = fm_maxf(dust, 0.6f * k.film) * st.gen_fade;
-    float crush_bits = dust > 0.4f ? fm_exp2f(15.0f - 6.0f * (dust - 0.4f) / 0.6f) : 0.0f;
+    float gf = st.gen_fade, wob_target = h_maxf(st.mode == MODE_LOFI ? k.wobble : 0.0f, 0.75f * k.film), wob_depth;
+    float lg[6], dust = st.mode == MODE_LOFI ? k.dust : 0.0f, noise = h_maxf(dust, 0.6f * k.film) * st.gen_fade;
+    float crush_bits = k.crush_bits;
     float rain_gain = st.mode == MODE_LOFI ? st.layer[3] : st.layer[0];
     float wind_gain = st.mode == MODE_DRIFT ? st.layer[3] * 0.6f : st.layer[0];
     float bed_gain = st.layer[0], life_gain = st.mode == MODE_DRIFT ? st.layer[3] * 0.7f : st.layer[1];
@@ -2571,24 +2729,39 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
         lg[2] = 0.0f;                    /* DRIFT's layer 2 is the bass, outside the voice pool */
     for (i = 0; i < n; i++) {
         float nl = frand2(), nr = frand2(), l = 0.0f, r = 0.0f, rs_l = 0.0f, rs_r = 0.0f, es = 0.0f, s, x, y;
-        float bl_l = 0.0f, bl_r = 0.0f, kbus = 0.0f;
+        float bl_l = 0.0f, bl_r = 0.0f, kbus = 0.0f, lb_l = 0.0f, lb_r = 0.0f;
         for (j = 0; j < NV; j++) {
             voice_t *v = &vo[j];
-            float g;
+            float g, send = 1.0f;
+            int loop = v->layer == SRC_LOOP;
             if (v->stage == ST_OFF)
                 continue;
-            s = voice_tick(v);
+            s = voice_tick(v, loop ? lfx.wmul : 1.0f);
             g = lg[v->layer];
             s *= g;
             if (v->layer >= SRC_KEYS)
                 kbus += s;
             v->out_l = s * v->pl;
             v->out_r = s * v->pr;
-            l += v->out_l;
-            r += v->out_r;
-            rs_l += s * v->pl * v->rev;
-            rs_r += s * v->pr * v->rev;
-            es += s * v->echo;
+            if (loop) {                      /* the loop has its own tape, below */
+                lb_l += v->out_l;
+                lb_r += v->out_r;
+                send = lfx.send;
+            } else {
+                l += v->out_l;
+                r += v->out_r;
+            }
+            rs_l += s * v->pl * v->rev * send;
+            rs_r += s * v->pr * v->rev * send;
+            es += s * v->echo * send;
+        }
+        if (lb_l != 0.0f || lb_r != 0.0f || lfx.lp_l != 0.0f) {   /* the loop's tape: aged, then driven */
+            lfx.lp_l += lfx.age_a * (lb_l - lfx.lp_l);
+            lfx.lp_r += lfx.age_a * (lb_r - lfx.lp_r);
+            lfx.lp_l = h_flush(lfx.lp_l);
+            lfx.lp_r = h_flush(lfx.lp_r);
+            l += lfx.dirt > 0.0f ? soft_tanh(lfx.lp_l * lfx.drive) * lfx.makeup : lfx.lp_l;
+            r += lfx.dirt > 0.0f ? soft_tanh(lfx.lp_r * lfx.drive) * lfx.makeup : lfx.lp_r;
         }
         s = bass_tick() * bass_gain * gf;
         l += s;
@@ -2619,14 +2792,14 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             bl_r += s * b->pr;
         }
         {
-            float bg = 1.4f * (k.rain > 0.0f ? rain_gain : bed_gain) * gf;
+            float bg = 0.9f * (k.rain > 0.0f ? rain_gain : bed_gain) * gf;
             l += bl_l * bg;
             r += bl_r * bg;
             rs_l += 0.3f * bl_l * bg;
             rs_r += 0.3f * bl_r * bg;
         }
         if (k.wind > 0.0f) {
-            float a = (0.12f + 0.55f * na.gust) * k.wind * wind_gain * gf;
+            float a = (0.075f + 0.35f * na.gust) * k.wind * wind_gain * gf;
             x = svf_bp(&na.wl, nl) * a;
             y = svf_bp(&na.wr, nr) * a;
             l += x;
@@ -2635,7 +2808,7 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             rs_r += 0.2f * y;
         }
         if (k.rain > 0.0f) {
-            float a = 0.14f * k.rain * rain_gain * gf;
+            float a = 0.09f * k.rain * rain_gain * gf;
             na.rain_hp_l += 0.12f * (nl - na.rain_hp_l);
             na.rain_hp_r += 0.12f * (nr - na.rain_hp_r);
             x = nl - na.rain_hp_l;
@@ -2646,7 +2819,7 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             r += na.rain_lp_r * a;
         }
         if (k.surf > 0.0f) {
-            float a = 0.8f * na.surf_env * k.surf * bed_gain * gf, w = 0.12f * na.surf_wash * k.surf * bed_gain * gf;
+            float a = 0.5f * na.surf_env * k.surf * bed_gain * gf, w = 0.075f * na.surf_wash * k.surf * bed_gain * gf;
             x = svf_lp(&na.sl, nl) * a;
             y = svf_lp(&na.sr, nr) * a;
             na.wash_lp_l += 0.5f * (nl - na.wash_lp_l);
@@ -2659,7 +2832,7 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             rs_r += 0.15f * y;
         }
         if (k.creek > 0.0f) {
-            float a = 0.28f * k.creek * bed_gain * gf;
+            float a = 0.17f * k.creek * bed_gain * gf;
             l += svf_bp(&na.creek_l, nl) * a;
             r += svf_bp(&na.creek_r, nr) * a;
         }
@@ -2713,8 +2886,12 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             rs_l += 0.45f * x;
             rs_r += 0.45f * y;
         }
-        {
-            float sm_mix = fm_maxf(lp.smear, k.reverse);
+        if (kbus != 0.0f || k.reverse > 0.0f)
+            ms.sm_quiet = 0;
+        else if (ms.sm_quiet < SM_N)
+            ms.sm_quiet++;
+        if (ms.sm_quiet < SM_N && (lp.smear > 0.0f || k.reverse > 0.0f)) {
+            float sm_mix = h_maxf(lp.smear, k.reverse);
             smear_tick(kbus + k.reverse * 0.5f * (rs_l + rs_r), &x, &y);
             x *= sm_mix;
             y *= sm_mix;
@@ -2744,7 +2921,7 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             ms.wob_s += 0.0005f * (wob_target - ms.wob_s);
             wob_depth = ms.wob_s;
             wob_drift += 0.0002f * (wob_drift_to - wob_drift);
-            d = 220.0f + wob_depth * (90.0f * sin_t(wow_ph) + 9.0f * sin_t(flutter_ph) + 60.0f * wob_drift);
+            d = 220.0f + wob_depth * (ms.wob_wf + 60.0f * wob_drift);
             l = wob_read(wob_l, d);
             r = wob_read(wob_r, d + 3.0f);
         }
@@ -2788,6 +2965,9 @@ void ms_render(int32_t *lr, uint32_t n, uint32_t gain_q12)
         control();
         wow_ph = wrap1(wow_ph + 0.45f * (float)m / MS_SR);
         flutter_ph = wrap1(flutter_ph + 5.7f * (float)m / MS_SR);
+        ms.wob_wf = 90.0f * sin_t(wow_ph) + 9.0f * sin_t(flutter_ph);
+        rv.mod_ph = wrap1(rv.mod_ph + 0.37f * (float)m / MS_SR);
+        rv.mod_m = sin_t(rv.mod_ph);
         if ((wob_drift_t -= (float)m / MS_SR) <= 0.0f) {
             wob_drift_t = 0.5f + 1.5f * frand();
             wob_drift_to = frand2();      /* a new place to drift to; the head glides there */
@@ -2806,11 +2986,14 @@ void ms_render(int32_t *lr, uint32_t n, uint32_t gain_q12)
         else if (k.film > 0.45f && frand() < (k.film - 0.45f) * 0.25f * (float)m / MS_SR)
             ms.drop_t = 0.08f + 0.22f * frand();
         ms_vis.tape_ph += (float)m / MS_SR * 0.35f * (st.playing ? 1.0f : 0.0f);
+        lfx.wph = wrap1(lfx.wph + 0.7f * (float)m / MS_SR);
+        lfx.wph2 = wrap1(lfx.wph2 + 0.23f * (float)m / MS_SR);
+        lfx.wmul = 1.0f + lfx.warble * (0.012f * sin_t(lfx.wph) + 0.008f * sin_t(lfx.wph2));
         {
             static const float MODE_GAIN[MS_NMODES] = {0.85f, 1.5f, 1.15f};   /* level-match the modes */
             ms.mode_gain += 0.01f * (MODE_GAIN[st.mode] - ms.mode_gain);
         }
-        render_block(bl_l_tmp, bl_r_tmp, m);
+        PLAT_FAR(render_block)(bl_l_tmp, bl_r_tmp, m);
         for (i = 0; i < m; i++) {
             float l = bl_l_tmp[i] * ms.mode_gain, r = bl_r_tmp[i] * ms.mode_gain, a;
             if (!(l > -8.0f && l < 8.0f))  /* drop NaN or a blowup so it cannot latch in the filters below */
@@ -2905,11 +3088,12 @@ void ms_shed(void)
         if (vo[i].stage == ST_REL)
             voice_cut(&vo[i]), n++;
     if (!n)
-        voice_cut(voice_alloc());
+        voice_cut(voice_alloc(SRC_KEYS));
 }
 void ms_keys(int i, int v) { post(C_KEYSET, i, v); }
 void ms_loop(int clear) { post(C_LOOP, clear, 0); }
 void ms_loop_set(int i, int v) { post(C_LOOPSET, i, v); }
+void ms_loop_fx(int i, int v) { post(C_LOOPFX, i, v); }
 void ms_fx(int i, int v) { post(C_FX, i, v); }
 void ms_space(int sp) { post(C_SPACE, sp, 0); }
 void ms_beat(int i, int v) { post(C_BEAT, i, v); }

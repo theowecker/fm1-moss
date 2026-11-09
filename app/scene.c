@@ -238,9 +238,12 @@ static void draw_lake(uint32_t now)
             int32_t gx = (int32_t)(hash32((uint32_t)d + now / 300u) % 230u);
             fill(gx, y, 3 + d / 8, 1, c565(mix(ra, lk->low, 160)));
         }
-        if (lk->orb && (d + (int32_t)(now / 120u)) % 3 == 0) {        /* orb reflection */
-            int32_t w = 2 + (int32_t)(hash32((uint32_t)d + now / 200u) % 6u);
-            fill(lk->orb_x - w / 2, y, w, 1, c565(mix(ra, C(255, 245, 220), 170)));
+        if (lk->orb && (d + (int32_t)(now / 120u)) % 3 == 0) {        /* orb reflection: open water only */
+            int32_t ox = clamp(lk->orb_x, 0, 239), top = sc.near_h[ox] < sc.far_h[ox] ? sc.near_h[ox] : sc.far_h[ox];
+            if (m < top && d > 4) {
+                int32_t w = 1 + d / 10 + (int32_t)(hash32((uint32_t)d + now / 200u) % (uint32_t)(2 + d / 8));
+                fill(lk->orb_x - w / 2, y, w, 1, c565(mix(ra, C(255, 245, 220), 120 + d * 2)));
+            }
         }
         if (ms_vis.rain > 0.0f && hash32((uint32_t)(y * 977) + now / 90u) % 5u == 0u)   /* rain on the water */
             fill((int32_t)(hash32((uint32_t)y + now / 90u) % 236u), y, 3, 1, c565(mix(ra, C(220, 225, 235), 140)));
@@ -458,7 +461,7 @@ static void scene_notes(void)
 
 static void loop_bar(uint32_t now)
 {
-    static const char *const NAME[4] = {"", "REC", "LOOP", "ADD"};
+    static const char *const NAME[4] = {"", "REC", "FADING", "ADD"};
     static const char *const HINT[4] = {"", "TAP REC TO LOOP", "", "TAP REC WHEN DONE"};
     uint32_t st = ms_vis.lp_state & 3u;
     uint16_t red = RGB(240, 96, 96), cream = RGB(236, 228, 206), c = st == MS_LOOP_PLAY ? cream : red;
@@ -469,10 +472,10 @@ static void loop_bar(uint32_t now)
         cv_text(128 - w / 2, 200, &FONT_T, HINT[st], red);
     }
     pill(10, 216, 220, 18, RGB(14, 14, 22));
-    cv_text(20, 219, &FONT_T, NAME[st], c);
+    cv_text(16, 219, &FONT_T, st == MS_LOOP_PLAY && ms_vis.lp_keep ? "KEPT" : NAME[st], c);
     fill(x0, 223, w, 4, RGB(50, 50, 62));
     for (t = 0; t < 4; t++) {                 /* the tracks: lit, dim when muted, dark when empty */
-        int used = ms_vis.lp_tracks >> t & 1u, muted = ms_vis.lp_mute >> t & 1u;
+        int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
         fill(194 + t * 8, 221, 6, 8, !used ? RGB(50, 50, 62) : muted ? RGB(110, 105, 95) : cream);
     }
     if (st == MS_LOOP_REC) {                  /* no length yet, so pulse */

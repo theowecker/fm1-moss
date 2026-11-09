@@ -52,7 +52,8 @@ void ms_seed(uint32_t s);
 /* i: 0 snap (FREE, SCALE, CHORD), 1 harmony 0..100, 2 voice (AUTO, EP, BELL, PAD, KALIMBA), 3 PLAY, LISTEN, HOLD (the keys add notes to the music or take them out) */
 void ms_keys(int i, int v);
 void ms_loop(int clear);               /* 0: advance record, play, overdub, play; 1: clear */
-void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
+void ms_loop_set(int i, int v);
+void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */
 void ms_track(int t, int v);           /* loop track 0..3: v 0..100 its level, -1 mute, -3 unmute, -2 clear */
@@ -113,7 +114,8 @@ typedef struct {
     volatile uint16_t pool;            /* HOLD: the pitch classes the music plays from, bit 0 = C */
     volatile uint32_t lp_dots[4];      /* each loop track's notes in 32 time bins */
     volatile uint8_t lp_tracks, lp_mute, lp_track;   /* tracks holding notes and muted (bit each), the one recording */
-    volatile uint32_t xfer_seq;        /* bumped when a snap or load is done */
+    volatile uint32_t xfer_seq;
+    volatile uint8_t lp_keep;          /* the loop is kept: it does not fade */        /* bumped when a snap or load is done */
     volatile uint8_t lp_state, lp_n;   /* MS_LOOP_*, notes held */
     volatile float lp_pos;             /* recording: seconds so far; playing: the playhead 0..1 */
     volatile float lp_len;             /* seconds */

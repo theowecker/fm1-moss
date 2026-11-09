@@ -15,8 +15,9 @@ expect page 4
 turn K4 5 20
 tap LFO
 tap LFO
+tap LFO
 wait 20
-expect page 6
+expect page 7
 turn K4 1 20
 wait 50
 expect slot0 2

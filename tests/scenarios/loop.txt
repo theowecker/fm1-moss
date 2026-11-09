@@ -21,6 +21,7 @@ tap SEQ
 wait 200
 shot loop-studio.png
 tap SEQ
+tap SEQ
 # a second phrase after a pause lands on its own track
 wait 500
 tapkey 9
@@ -33,7 +34,9 @@ tap LFO
 turn K2 -40
 wait 50
 tap SEQ
+tap SEQ
 wait 200
+expect view 2
 shot tracks.png
 tap SEQ
 press REC
@@ -41,7 +44,7 @@ wait 1600
 release REC
 wait 50
 expect loop 0
-# by hand: ARP records, ARP closes, ARP overdubs
+# REC by hand: records, closes the loop, then keeps it from fading or lets it fade again
 tap REC
 wait 50
 expect loop 1
@@ -54,11 +57,12 @@ wait 50
 expect loop 2
 tap REC
 wait 50
-expect loop 3
+expect keep 1
 tapkey 12
 wait 100
 tap REC
 wait 50
+expect keep 0
 expect loop 2
 expect loopn 3
 # the controls: ALGORITHM picks the space, PRESETS walks every scene

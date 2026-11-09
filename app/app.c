@@ -8,22 +8,22 @@
 #include <stddef.h>
 #include "fastmath.h"
 
-#define SET_MAGIC 0x4D4F5332u            /* "MOS2" */
-enum { PG_HOME, PG_MIX, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_SLOTS, PG_FX, PG_SETUP, NPAGES };
-enum { VIEW_SCENE, VIEW_STUDIO };
-static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "BEAT", "KEYS", "LOOP", "SHAPE", "SLOTS", "FX", "SETUP"};
-static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_FX, B_GLO};
+#define SET_MAGIC 0x4D4F5333u            /* "MOS3" */
+enum { PG_HOME, PG_MIX, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_SLOTS, PG_FX, PG_SETUP, NPAGES };
+enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, NVIEWS };
+static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "BEAT", "KEYS", "LOOP", "SHAPE", "TAPE", "SLOTS", "FX", "SETUP"};
+static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_FX, B_GLO};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
 static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"};
 static const char *const TAP_NAME[3] = {"PLAY", "LISTEN", "HOLD"};
 static const char *const SPEED_NAME[5] = {"1/2", "1x", "2x", "REV", "REV 1/2"};
 static const char *const PAGE_KNOBS[NPAGES][4] = {
-    {0}, {0}, {"KIT", "PATTERN", "LEVEL", "BASS"}, {"SNAP", "HARMONY", "VOICE", "TAP"}, {"TRACK", "LEVEL", "MUTE", "ERASE"},
-    {"FADE", "MUTATE", "SMEAR", "SPEED"}, {"SLOT", "SAVE", "LOAD", "DELETE"},
+    {0}, {0}, {"KIT", "PATTERN", "LEVEL", "BASS"}, {"SNAP", "HARMONY", "VOICE", "TAP"}, {"TRACK", "LEVEL", "SHIFT", "ERASE"},
+    {"FADE", "MUTATE", "SMEAR", "SPEED"}, {"WARBLE", "DIRT", "AGE", "SEND"}, {"SLOT", "SAVE", "LOAD", "DELETE"},
     {"DELAY", "TIME", "REPEATS", "FILM"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
-static const uint8_t PAGE_STEPS[NPAGES][4] = {{0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0, 5, 0, 0}, {0}};
+static const uint8_t PAGE_STEPS[NPAGES][4] = {{0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {0, 5, 0, 0}, {0}};
 /* a knob that acts (SAVE, LOAD, ERASE, DELETE) does so once turned right this many detents: an accident takes more
  * than a nudge, and the gauge shows how close it is */
 #define CONFIRM_SHORT 2
@@ -45,7 +45,7 @@ typedef struct {
     uint8_t macro[MS_NMODES][MS_NMACRO];
     uint8_t mix[MS_NMODES][MS_NMIX];
     uint8_t tempo[MS_NMODES], mood[MS_NMODES];
-    uint8_t keys[4], loop[4], fx[4];
+    uint8_t keys[4], loop[4], fx[4], tape[4];
     uint8_t beat[MS_NMODES][4];          /* kit, pattern, level, bass */
     uint8_t rsv[8];
 } settings_t;
@@ -90,6 +90,7 @@ static void settings_defaults(void)
     }
     set.keys[0] = 1, set.keys[1] = 30, set.keys[2] = 0, set.keys[3] = 1;
     set.loop[0] = 30, set.loop[1] = 25, set.loop[2] = 30, set.loop[3] = 1;
+    set.tape[3] = 50;
     set.fx[0] = 30, set.fx[1] = 2, set.fx[2] = 45, set.fx[3] = 20;
 }
 
@@ -102,10 +103,11 @@ static int settings_ok(void)
 {
     int m;
     if (set.magic != SET_MAGIC || set.mode >= MS_NMODES || set.page >= NPAGES || set.root > 11u || set.sleep >= NSLEEP
-        || set.octave < -2 || set.octave > 2 || set.view > VIEW_STUDIO || set.space >= MS_NSPACES)
+        || set.octave < -2 || set.octave > 2 || set.view >= NVIEWS || set.space >= MS_NSPACES)
         return 0;
     for (m = 0; m < 4; m++)
-        if (!knob_ok(PG_KEYS, m, set.keys[m]) || !knob_ok(PG_SHAPE, m, set.loop[m]) || !knob_ok(PG_FX, m, set.fx[m]))
+        if (!knob_ok(PG_KEYS, m, set.keys[m]) || !knob_ok(PG_SHAPE, m, set.loop[m]) || !knob_ok(PG_FX, m, set.fx[m])
+            || !knob_ok(PG_TAPE, m, set.tape[m]))
             return 0;
     for (m = 0; m < MS_NMODES * 4; m++)
         if (!knob_ok(PG_BEAT, m % 4, set.beat[m / 4][m % 4]))
@@ -141,6 +143,7 @@ static void send_all(void)
     for (i = 0; i < 4; i++) {
         ms_keys(i, set.keys[i]);
         ms_loop_set(i, set.loop[i]);
+        ms_loop_fx(i, set.tape[i]);
         ms_fx(i, set.fx[i]);
     }
     ms_space(set.space);
@@ -218,6 +221,14 @@ static void text_cat(char *d, const char *s)
     *d = 0;
 }
 
+static uint32_t text_len(const char *s)
+{
+    uint32_t n = 0;
+    while (s[n])
+        n++;
+    return n;
+}
+
 static void int_text(int32_t v, char *b)
 {
     char t[12];
@@ -258,7 +269,7 @@ void app_say(const char *a, const char *b)
 
 static uint8_t *page_vals(int page)
 {
-    return page == PG_KEYS ? set.keys : page == PG_SHAPE ? set.loop : page == PG_FX ? set.fx
+    return page == PG_KEYS ? set.keys : page == PG_SHAPE ? set.loop : page == PG_TAPE ? set.tape : page == PG_FX ? set.fx
          : page == PG_BEAT ? set.beat[set.mode] : 0;
 }
 
@@ -279,7 +290,7 @@ static int knob_value(int i)   /* 0..100 */
     uint8_t *v = page_vals(set.page);
     if (set.page == PG_LOOP)
         return i == 0 ? ui.sel_track * 100 / 3 : i == 1 ? ui.track_lvl[ui.sel_track]
-             : i == 2 ? (ms_vis.lp_mute >> ui.sel_track & 1u ? 0 : 100) : ui.confirm[3] * 100 / CONFIRM_LONG;
+             : i == 2 ? 50 : ui.confirm[3] * 100 / CONFIRM_LONG;
     if (set.page == PG_SLOTS)
         return i == 0 ? ui.sel_slot * 100 / 7 : ui.confirm[i] * 100 / confirm_need(i);
     if (set.page == PG_HOME)
@@ -308,9 +319,12 @@ static void knob_text(int i, char *t)
             int_text(sel + 1, t);
             text_cat(t, used ? "" : " EMPTY");
         } else if (set.page == PG_LOOP && i == 1) {
-            int_text(ui.track_lvl[sel], t);
+            if (ui.track_lvl[sel])
+                int_text(ui.track_lvl[sel], t);
+            else
+                text_cat(t, "OFF");
         } else if (set.page == PG_LOOP && i == 2) {
-            text_cat(t, ms_vis.lp_mute >> sel & 1u ? "MUTED" : "ON");
+            text_cat(t, "< >");
         } else {
             text_cat(t, ui.confirm[i] ? "MORE >" : "TURN >");
         }
@@ -368,18 +382,20 @@ static int pages_act(int i, int32_t d)
         ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
         return 0;
     }
-    if (loop && i == 1) {
+    if (loop && i == 1) {               /* all the way down is off */
         ui.track_lvl[sel] = (uint8_t)clamp(ui.track_lvl[sel] + 2 * d, 0, 100);
         ms_track(sel, ui.track_lvl[sel]);
         return 0;
     }
-    if (loop && i == 2) {
+    if (loop && i == 2) {                /* SHIFT: the track a sixteenth later or earlier a click */
+        int32_t n = d < 0 ? -d : d;
         if (!(ms_vis.lp_tracks >> sel & 1u)) {
             app_say("TRACK", "EMPTY");
             return 1;
         }
-        ms_track(sel, d < 0 ? -1 : -3);
-        app_say("TRACK", d < 0 ? "MUTED" : "ON");
+        while (n--)
+            ms_track(sel, d > 0 ? -4 : -5);
+        app_say("SHIFT", d > 0 ? "LATER" : "EARLIER");
         return 1;
     }
     ui.confirm_t = plat_ms();
@@ -423,6 +439,8 @@ static void knob_turn(int i, int32_t d)
             ms_keys(i, v[i]);
         else if (set.page == PG_SHAPE)
             ms_loop_set(i, v[i]);
+        else if (set.page == PG_TAPE)
+            ms_loop_fx(i, v[i]);
         else
             ms_fx(i, v[i]);
     } else if (i == 0) {
@@ -765,7 +783,7 @@ static void input(void)
             }
             break;
         case B_LFO:
-            page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_SLOTS : PG_LOOP);
+            page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_TAPE : set.page == PG_TAPE ? PG_SLOTS : PG_LOOP);
             break;
         case B_FX:
             page_set(PG_FX);
@@ -793,10 +811,10 @@ static void input(void)
     if (ui.seq_t && !(btn >> B_SEQ & 1u)) {   /* SEQ: a press switches the view; held with keys, loads slots */
         ui.seq_t = 0;
         if (!ui.seq_used) {
-            set.view = (uint8_t)!set.view;
+            set.view = (uint8_t)((set.view + 1u) % NVIEWS);
             set_dirty = 1;
             ui.label_until = now + 3000u;
-            app_say(set.view == VIEW_SCENE ? "PICTURE" : "STUDIO", "");
+            app_say(set.view == VIEW_SCENE ? "PICTURE" : set.view == VIEW_STUDIO ? "STUDIO" : "LOOPS", "");
         }
     }
     if (ui.save_t) {                     /* SAVE: a tap saves; held two seconds and let go, resets the scene */
@@ -818,7 +836,7 @@ static void input(void)
             }
         }
     }
-    if (ui.arp_t) {                      /* REC: a tap moves the looper on a step, a one second hold clears it */
+    if (ui.arp_t) {                      /* REC: records or closes a loop, keeps it or lets it fade; held, clears */
         if (btn >> B_REC & 1u) {
             if (now - ui.arp_t >= 1000u) {
                 ui.arp_t = 0;
@@ -826,18 +844,20 @@ static void input(void)
                 app_say("LOOP", "CLEARED");
             }
         } else {
-            static const char *const NEXT[4] = {"REC", "LOOP", "ADDING", "LOOP"};
-            static const char *const HINT[4] = {"TAP REC TO LOOP", "TAP REC TO ADD", "TAP REC WHEN DONE", "TAP REC TO ADD"};
+            uint32_t st = ms_vis.lp_state;
             ui.arp_t = 0;
-            if (set.keys[3] == 2 && (ms_vis.lp_state == MS_LOOP_EMPTY || ms_vis.lp_state == MS_LOOP_PLAY)) {   /* HOLD's notes are switches, not loopable */
+            if (set.keys[3] == 2 && st == MS_LOOP_EMPTY)   /* HOLD's notes are switches, not loopable */
                 app_say("HOLD", "KEYS EDIT NOTES");
-            } else if (ms_vis.lp_state == MS_LOOP_REC && !ms_vis.lp_n) {
+            else if (st == MS_LOOP_EMPTY)
+                app_say("RECORDING", "TAP REC TO LOOP");
+            else if (st == MS_LOOP_REC && !ms_vis.lp_n)
                 app_say("NOTHING", "RECORDED");
+            else if (st == MS_LOOP_PLAY)
+                app_say(ms_vis.lp_keep ? "FADING" : "KEPT", ms_vis.lp_keep ? "TAP REC TO KEEP" : "HOLD REC TO CLEAR");
+            else
+                app_say("LOOPING", "TAP REC TO KEEP");
+            if (!(set.keys[3] == 2 && st == MS_LOOP_EMPTY))
                 ms_loop(0);
-            } else {
-                app_say(NEXT[ms_vis.lp_state & 3u], HINT[ms_vis.lp_state & 3u]);
-                ms_loop(0);
-            }
         }
     }
     if ((e = plat_enc(EN_ALGO)) != 0)
@@ -855,7 +875,8 @@ static void input(void)
     ui.btn = btn;
     {
         uint32_t lp = ms_vis.lp_state, lit;
-        int loop_lit = lp == MS_LOOP_PLAY || ((lp == MS_LOOP_REC || lp == MS_LOOP_DUB) && (now / 250u & 1u));
+        int loop_lit = lp == MS_LOOP_PLAY ? (ms_vis.lp_keep || (now / 700u & 1u))
+                     : (lp == MS_LOOP_REC || lp == MS_LOOP_DUB) && (now / 200u & 1u);
         lit = (ui.playing ? 1u << B_PLAY : 0u) | (ui.frozen ? 1u << B_ARP : 0u) | (set_dirty ? 1u << B_SAVE : 0u)
             | (loop_lit ? 1u << B_REC : 0u) | 1u << PAGE_BTN[set.page] | btn;
         uint32_t chord = 0, held = 0, mask = ms_vis.chord_mask;
@@ -911,6 +932,10 @@ static void speak(void)
         text_cat(t, ms_scene(set.mode, set.scene[set.mode])->name);
         text_cat(t, ". ");
         text_cat(t, PAGE_NAME[set.page]);
+        text_cat(t, ". CPU ");             /* the load and the late blocks so far: for checking a build on the FM-1 */
+        int_text((int32_t)plat_cpu_pct(), t + text_len(t));
+        text_cat(t, ". LATE ");
+        int_text((int32_t)plat_xruns(), t + text_len(t));
         ann_say(t, 0, ANN_NOW);
     }
     ann_tick(plat_ms());
@@ -958,7 +983,7 @@ void app_frame(void)
     if (ui.redraw || now - ui.vis_at >= 50u) {   /* 20 fps */
         ui.redraw = 0;
         ui.vis_at = now;
-        if (set.view == VIEW_SCENE && set.page != PG_LOOP && set.page != PG_SLOTS)   /* those pages draw in the studio */
+        if (set.view == VIEW_SCENE)
             scene_draw(now);
         else
             studio_draw(now);
@@ -990,6 +1015,12 @@ int app_expect(const char *what, int *got)
         *got = __builtin_popcount(ms_vis.pool);
     else if (!strncmp(what, "slot", 4))   /* slotN: how many notes slot N holds */
         *got = slots.s[atoi(what + 4) % NSLOTS].n;
+    else if (!strcmp(what, "keep"))
+        *got = ms_vis.lp_keep;
+    else if (!strcmp(what, "dots0"))      /* track 1's notes, bit per 32nd of the loop */
+        *got = (int)ms_vis.lp_dots[0];
+    else if (!strcmp(what, "bars1000"))  /* the loop's length in bars, times 1000 */
+        *got = (int)(ms_vis.lp_len * (float)set.tempo[set.mode] / 240.0f * 1000.0f + 0.5f);
     else if (!strcmp(what, "tracks"))
         *got = ms_vis.lp_tracks;
     else if (!strcmp(what, "muted"))

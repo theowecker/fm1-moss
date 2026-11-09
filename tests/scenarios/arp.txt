@@ -16,7 +16,7 @@ expect held 7
 tap ENV
 wait 50
 expect tap 0
-# ARP: tap records, tap loops, tap adds a layer, tap finishes, a one second hold clears
+# REC: tap records, tap loops, tap keeps it, tap lets it fade, a one second hold clears
 tap REC
 wait 50
 expect loop 1
@@ -27,13 +27,11 @@ wait 50
 expect loop 2
 tap REC
 wait 50
-expect loop 3
-tapkey 9
-wait 100
+expect keep 1
 tap REC
 wait 50
+expect keep 0
 expect loop 2
-expect tracks 3
 shot looping.png
 press REC
 wait 1100

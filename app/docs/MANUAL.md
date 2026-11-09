@@ -11,8 +11,8 @@ picks up what you play.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
 - **SELECT** steps through the pages. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
-- **REC** is the looper. **ARP** freezes the sound.
-- **SEQ** switches the screen between the picture and the studio view.
+- **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
+- **SEQ** steps through the three screens: the picture, the studio and the loops.
 - **SAVE** saves your settings.
 
 ## The panel
@@ -25,15 +25,15 @@ picks up what you play.
 | HOME | The HOME page |
 | SEL | The MIX page. Press again for BEAT |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
-| LFO | The LOOP page. Press again for SHAPE, and again for SLOTS |
+| LFO | The LOOP page. Press again for SHAPE, TAPE, then SLOTS |
 | FX | The FX page |
 | GLO | The SETUP page |
 | K1 to K4 | The four knobs of the page you are on |
-| REC | The looper: tap to record, tap to loop, tap to add a track. Hold for a second to clear. See [Looping](#looping) |
+| REC | The looper: tap to keep the loop from fading (tap again to let it fade). Hold for a second to clear it. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
-| SEQ | Picture or studio view |
+| SEQ | The next screen: PICTURE, STUDIO, LOOPS |
 | SAVE | Save your settings. Hold for two seconds and let go to reset the scene |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
@@ -142,28 +142,38 @@ In HOLD the keys don't play notes themselves, so there is nothing for REC to loo
 
 ![](img/loop-page.png)
 
-The loop's tracks, shown as lanes of dots in the studio view. The screen switches to the studio view on this page.
+The loop's tracks. Press SEQ until the LOOPS screen to see them as lanes of dots.
 
 | Knob | What it does |
 | --- | --- |
 | TRACK | Pick a track, 1 to 4. Its lane is highlighted |
-| LEVEL | How loud that track is. At 0 it is silent, and so is anything recorded on it next |
-| MUTE | Turn right: on. Turn left: muted |
+| LEVEL | How loud that track is. All the way down is OFF |
+| SHIFT | Slide the track a sixteenth later (right) or earlier (left) for each click |
 | ERASE | Keep turning right until the gauge fills: the track is erased. Stop for a moment and the gauge empties again |
 
 ### SHAPE (LFO again)
 
 | Knob | What it does |
 | --- | --- |
-| FADE | How fast the loop dies away. 0 keeps it forever. When every note has faded, the loop is gone |
+| FADE | How fast the loop dies away while it is not kept. When every note has faded, the loop is gone |
 | MUTATE | How often notes move to a nearby note, jump an octave or move in time |
 | SMEAR | Backwards swells under your notes, and softer, slower repeats |
 | SPEED | 1/2, 1x, 2x, REV, REV 1/2 |
 
-### SLOTS (LFO a third time)
+### TAPE (LFO a third time)
 
-Eight places to keep loops. They stay after you turn the FM-1 off. The screen switches to the studio view on this
-page and lists what each slot holds.
+The loop's own tape. These change only the loop, not the rest of the music.
+
+| Knob | What it does |
+| --- | --- |
+| WARBLE | Wobbly pitch, like a stretched tape |
+| DIRT | Saturation, then grit as you turn it up |
+| AGE | Darker and duller, like a worn tape |
+| SEND | How much of the loop goes into the reverb and delay |
+
+### SLOTS (LFO a fourth time)
+
+Eight places to keep loops. They stay after you turn the FM-1 off. The LOOPS screen lists what each one holds.
 
 | Knob | What it does |
 | --- | --- |
@@ -216,29 +226,31 @@ Turn ALGORITHM.
 
 ## Looping
 
-REC is the looper. The screen always says what the next tap does.
-
 ![](img/loop.png)
 
-1. Tap REC: recording. Play.
-2. Tap REC: the loop plays.
-3. Tap REC: add a track on top. Play.
-4. Tap REC: done adding. Repeat 3 and 4 for up to four tracks.
-5. Hold REC for a second: the loop is cleared.
+With TAP on LISTEN (where it starts), you just play:
 
-With TAP on LISTEN you don't need REC: just play, and stop for two seconds.
+1. Play a few notes and stop. After two seconds of quiet they loop.
+2. Play again and the new phrase joins the loop on its own track, up to four.
+3. The loop slowly fades while you leave it, and changes a little each time round (SHAPE sets how much).
+4. **Tap REC to keep it.** It stops fading. Tap REC again to let it fade.
+5. **Hold REC for a second to clear it.**
 
-The bar at the bottom of the picture shows the loop. It is red while recording and cream while playing. The four
-squares next to it are the tracks: bright when on, grey when muted, dark when empty.
+With TAP on PLAY nothing loops by itself. Tap REC to start recording, play, and tap REC again to loop it.
+
+When there is a beat (LOFI, or a kit on the BEAT page), the loop is a whole number of bars, 1, 2, 4 or 8, and its
+notes sit on the beat's grid with its swing, so it stays in time with the drums. Without a beat the loop keeps the
+timing you played.
+
+The bar at the bottom of the picture shows the loop: red while recording, then FADING or KEPT. The four squares
+next to it are the tracks: bright when on, grey when off, dark when empty. REC's light blinks fast while recording,
+slowly while the loop fades, and stays on when it is kept.
 
 A recording stops by itself after 60 seconds. A loop holds 96 notes; past that, new notes replace the quietest.
 The loop keeps playing when you press PLAY to stop the music, so you can play over silence. HOLD's notes are not
 looped.
 
-The LOOP page sets each track's level, mutes it or erases it. The SHAPE page sets how the loop fades and changes.
-The SLOTS page saves and loads loops.
-
-## The two views
+## The three screens
 
 Press SEQ.
 
@@ -250,6 +262,9 @@ you hear blooms where it falls. The bars on the left are the part levels. The co
 loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bottom.
 
 ![](img/studio.png)
+
+**Loops**: the loop's four tracks as lanes of dots with the playhead running across them, what REC will do next,
+and the eight slots with what each one holds.
 
 ## MIDI
 

@@ -33,6 +33,7 @@ expect_sysex F0 7D 4D 4F 03 F7
 tap LFO
 tap LFO
 tap LFO
+tap LFO
 turn K4 6
 wait 50
 expect slot0 0
@@ -47,8 +48,9 @@ wait 3000
 tap LFO
 tap LFO
 tap LFO
+tap LFO
 wait 50
-expect page 6
+expect page 7
 turn K1 2
 turn K2 2
 wait 200
@@ -61,6 +63,7 @@ expect loop 0
 turn K3 2
 wait 200
 expect loop 2
+tap SEQ
 tap SEQ
 wait 200
 shot slots-page.png
