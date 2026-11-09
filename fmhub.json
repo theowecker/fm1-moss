@@ -1,0 +1,11 @@
+{
+  "what": "Ambient firmware: lofi chords, nature scenes and generative pads and bells, each with its own pixel picture. Play and the music follows: notes loop, fade and change, HOLD adds or takes away notes, and there are drum kits, six reverb spaces, a tape FILM knob and a sleep timer.",
+  "author": "Theo Wecker",
+  "kinds": [
+    "synth"
+  ],
+  "play": "https://theowecker.github.io/fm1-moss/emu/",
+  "cheat": "https://theowecker.github.io/fm1-moss/manual/",
+  "image": "app/docs/img/drift-dusk.png",
+  "color": "#7FC88A"
+}
