@@ -13,7 +13,7 @@ picks up what you play.
 - **The keys** play along, in key.
 - **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
 - **SEQ** steps through the three screens: the picture, the studio and the loops.
-- **SAVE** saves your settings.
+- **SAVE** saves your settings and your loops.
 
 ## The panel
 
@@ -25,7 +25,7 @@ picks up what you play.
 | HOME | The HOME page |
 | SEL | The MIX page. Press again for BEAT |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
-| LFO | The LOOP page. Press again for SHAPE, TAPE, then SLOTS |
+| LFO | The LOOP page. Press again for SHAPE, TAPE, then LIBRARY |
 | FX | The FX page |
 | GLO | The SETUP page |
 | K1 to K4 | The four knobs of the page you are on |
@@ -34,7 +34,7 @@ picks up what you play.
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
 | SEQ | The next screen: PICTURE, STUDIO, LOOPS |
-| SAVE | Save your settings. Hold for two seconds and let go to reset the scene |
+| SAVE | Save your settings and your loop library. Hold for two seconds and let go to reset the scene |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
 
@@ -142,14 +142,9 @@ In HOLD the keys don't play notes themselves, so there is nothing for REC to loo
 
 ![](img/loop-page.png)
 
-The loop's tracks. Press SEQ until the LOOPS screen to see them as lanes of dots.
-
-| Knob | What it does |
-| --- | --- |
-| TRACK | Pick a track, 1 to 4. Its lane is highlighted |
-| LEVEL | How loud that track is. All the way down is OFF |
-| SHIFT | Slide the track a sixteenth later (right) or earlier (left) for each click |
-| ERASE | Keep turning right until the gauge fills: the track is erased. Stop for a moment and the gauge empties again |
+The loop's layers, one knob each: K1 is layer 1, K2 layer 2, and so on. Turn a layer down to switch it off and back
+up to bring it back. A layer with nothing on it shows -. Press SEQ until the LOOPS screen to see the layers as lanes
+of dots.
 
 ### SHAPE (LFO again)
 
@@ -157,7 +152,7 @@ The loop's tracks. Press SEQ until the LOOPS screen to see them as lanes of dots
 | --- | --- |
 | FADE | How fast the loop dies away while it is not kept. When every note has faded, the loop is gone |
 | MUTATE | How often notes move to a nearby note, jump an octave or move in time |
-| SMEAR | Backwards swells under your notes, and softer, slower repeats |
+| SHIFT | Slide the whole loop a sixteenth later (right) or earlier (left) for each click |
 | SPEED | 1/2, 1x, 2x, REV, REV 1/2 |
 
 ### TAPE (LFO a third time)
@@ -169,21 +164,16 @@ The loop's own tape. These change only the loop, not the rest of the music.
 | WARBLE | Wobbly pitch, like a stretched tape |
 | DIRT | Saturation, then grit as you turn it up |
 | AGE | Darker and duller, like a worn tape |
-| SEND | How much of the loop goes into the reverb and delay |
+| SMEAR | Backwards swells under your notes, and softer, slower repeats |
 
-### SLOTS (LFO a fourth time)
+### LIBRARY (LFO a fourth time)
 
-Eight places to keep loops. They stay after you turn the FM-1 off. The LOOPS screen lists what each one holds.
+Your last eight loops, kept for you. The LOOPS screen lists them, newest first, with > by the one playing.
 
 | Knob | What it does |
 | --- | --- |
-| SLOT | Pick a slot, 1 to 8 |
-| SAVE | Turn right: the loop playing now goes into the slot, replacing what was there |
-| LOAD | Turn right: the slot's loop starts playing, replacing the loop you have |
-| DELETE | Keep turning right until the gauge fills: the slot is emptied |
-
-Shortcut: the first eight white keys are the eight slots. Hold SAVE and tap one to save there. Hold SEQ and tap
-one to load it. While SAVE or SEQ is held, the keys holding a loop light up.
+| LOOP | Turn to a loop and it starts playing |
+| DELETE | Keep turning right until the gauge fills: that loop is taken out of the library |
 
 ### FX
 
@@ -231,19 +221,24 @@ Turn ALGORITHM.
 With TAP on LISTEN (where it starts), you just play:
 
 1. Play a few notes and stop. After two seconds of quiet they loop.
-2. Play again and the new phrase joins the loop on its own track, up to four.
+2. Play again and the new phrase goes on top as a new layer, up to four.
 3. The loop slowly fades while you leave it, and changes a little each time round (SHAPE sets how much).
 4. **Tap REC to keep it.** It stops fading. Tap REC again to let it fade.
-5. **Hold REC for a second to clear it.**
+5. **Hold REC for a second to clear it** and start a new one.
 
 With TAP on PLAY nothing loops by itself. Tap REC to start recording, play, and tap REC again to loop it.
+
+**Every loop goes into the library by itself.** The one playing is kept up to date as you add layers, and when you
+clear it and start a new one, the old one stays in the list. The library holds your last eight. To keep them after
+you turn the FM-1 off, press SAVE (SAVE stays lit while there is something to save). Writing to the flash stops the
+sound for a moment, so it only happens when you press SAVE.
 
 When there is a beat (LOFI, or a kit on the BEAT page), the loop is a whole number of bars, 1, 2, 4 or 8, and its
 notes sit on the beat's grid with its swing, so it stays in time with the drums. Without a beat the loop keeps the
 timing you played.
 
 The bar at the bottom of the picture shows the loop: red while recording, then FADING or KEPT. The four squares
-next to it are the tracks: bright when on, grey when off, dark when empty. REC's light blinks fast while recording,
+next to it are the layers: bright when on, grey when off, dark when empty. REC's light blinks fast while recording,
 slowly while the loop fades, and stays on when it is kept.
 
 A recording stops by itself after 60 seconds. A loop holds 96 notes; past that, new notes replace the quietest.
@@ -263,8 +258,8 @@ loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bott
 
 ![](img/studio.png)
 
-**Loops**: the loop's four tracks as lanes of dots with the playhead running across them, what REC will do next,
-and the eight slots with what each one holds.
+**Loops**: the loop's four layers as lanes of dots with the playhead running across them, what REC will do next,
+and the library with what each loop holds.
 
 ## MIDI
 
@@ -296,8 +291,8 @@ The FM-1 shows up on your computer as an audio input over USB. Record it in any 
 5. **Make video** turns the take into an MP4 with a scene picture (or your own) as the image, ready to upload to
    YouTube. Pick the picture above the list.
 
-The same page reads your saved loops (Read loops) and downloads each one as a MIDI file, one MIDI track per loop
-track.
+The same page reads your loop library (Read loops) and downloads each loop as a MIDI file, one MIDI track per
+layer.
 
 ## Going back to stock firmware
 

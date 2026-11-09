@@ -70,7 +70,7 @@
   </div>
   <ul id="takes"></ul>
   <h1 style="margin-top:40px">LOOPS</h1>
-  <p class="sub">The eight loop slots, and the loop playing now, as MIDI files. Each loop track is its own MIDI track.</p>
+  <p class="sub">The loop library, and the loop playing now, as MIDI files. Each layer is its own MIDI track.</p>
   <div class="deck">
     <div class="row"><button id="read">Read loops</button><span class="status" id="mstatus" style="margin:0"></span></div>
     <ul id="loops" style="margin-top:12px"></ul>
@@ -293,7 +293,7 @@
     ul.innerHTML = '';
     for (let i = 0; i <= 8; i++) {
       const loop = got[i], li = document.createElement('li');
-      const name = i < 8 ? `Slot ${i + 1}` : 'Playing now';
+      const name = i < 8 ? `Loop ${i + 1}` : 'Playing now';
       const has = loop && loop.ev.length;
       li.innerHTML = `<span class="name">${name}</span><span class="len">${has ? `${loop.ev.length} notes, ${(loop.len / 1000).toFixed(1)}s` : 'empty'}</span>`;
       if (has) {
@@ -302,7 +302,7 @@
         b.onclick = () => {
           const a = document.createElement('a');
           a.href = URL.createObjectURL(midiFile(loop));
-          a.download = `moss-${i < 8 ? 'slot-' + (i + 1) : 'now'}.mid`;
+          a.download = `moss-${i < 8 ? 'loop-' + (i + 1) : 'now'}.mid`;
           a.click();
         };
         li.appendChild(b);

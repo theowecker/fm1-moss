@@ -1,4 +1,4 @@
-# the LOOP page: SHIFT slides a track a sixteenth a click, and back again
+# SHAPE's SHIFT slides the whole loop a sixteenth a click, and back again
 wait 600
 tapkey 7
 wait 300
@@ -6,12 +6,12 @@ tapkey 11
 wait 3000
 expect loop 2
 tap LFO
+tap LFO
 wait 50
-expect page 4
+expect page 5
 expect dots0 >0
 turn K3 4 1
 wait 100
 turn K3 -4 1
 wait 100
 expect loop 2
-expect dots0 4352

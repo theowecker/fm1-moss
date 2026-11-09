@@ -1,25 +1,20 @@
-# turning PRESETS fast while saving a slot: nothing is dropped, and slots still work after
+# turning PRESETS fast while the library takes its copies: nothing is dropped, and it keeps working after
 wait 600
 tapkey 7
 wait 300
 tapkey 11
 wait 3000
-press SAVE
-key 0 down
-wait 10
 turn PRESET 3 1
-key 0 up
-release SAVE
-wait 200
+wait 4000
 expect loop 2
-expect slot0 >1
-tapkey 7
+expect slot0 2
+press REC
+wait 1100
+release REC
+tapkey 9
 wait 300
-tapkey 11
+tapkey 12
 wait 3000
-expect loop 2
-press SAVE
-tapkey 2
-release SAVE
-wait 200
-expect slot1 >1
+wait 3500
+expect slot0 2
+expect slot1 2

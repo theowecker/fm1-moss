@@ -1962,6 +1962,7 @@ static void loop_tap(void)
         }
         lp.autorec = 0;
         lp.state = LP_PLAY;
+        ms_vis.lp_gen++;
         break;
     case LP_PLAY:
         lp.track = loop_next_track();
@@ -2077,6 +2078,7 @@ static void loop_load(void)
     lp.autorec = 0;
     lp.track = loop_next_track();
     lp.state = LP_PLAY;
+    ms_vis.lp_gen++;
 }
 
 static int crossed(float t, float u0, float u1, float len)

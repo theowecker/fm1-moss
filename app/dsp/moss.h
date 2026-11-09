@@ -115,7 +115,8 @@ typedef struct {
     volatile uint32_t lp_dots[4];      /* each loop track's notes in 32 time bins */
     volatile uint8_t lp_tracks, lp_mute, lp_track;   /* tracks holding notes and muted (bit each), the one recording */
     volatile uint32_t xfer_seq;
-    volatile uint8_t lp_keep;          /* the loop is kept: it does not fade */        /* bumped when a snap or load is done */
+    volatile uint8_t lp_keep;          /* the loop is kept: it does not fade */
+    volatile uint32_t lp_gen;          /* bumped when a new loop begins or one is loaded */        /* bumped when a snap or load is done */
     volatile uint8_t lp_state, lp_n;   /* MS_LOOP_*, notes held */
     volatile float lp_pos;             /* recording: seconds so far; playing: the playhead 0..1 */
     volatile float lp_len;             /* seconds */

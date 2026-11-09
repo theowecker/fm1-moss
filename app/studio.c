@@ -251,8 +251,6 @@ static void loops_view(uint32_t now)
         int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
         int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC) && ms_vis.lp_track == t;
         uint16_t c = rec ? RGB(240, 96, 96) : !used ? ST_DIM : muted ? c565(mix(bg, acc, 80)) : c565(acc);
-        if (set.page == PG_LOOP && t == ui.sel_track)
-            pill(4, y - 7, 232, 14, ST_LINE);
         n[0] = (char)('1' + t);
         n[1] = 0;
         cv_text(10, y - 6, &FONT_T, n, c);
@@ -269,9 +267,9 @@ static void loops_view(uint32_t now)
     for (i = 0; i < NSLOTS; i++) {               /* the slots, two columns of four */
         int32_t x = 6 + (i / 4) * 116, y = 124 + (i % 4) * 12;
         const ms_slot_t *sl = &slots.s[i];
-        if (set.page == PG_SLOTS && i == ui.sel_slot)
+        if (set.page == PG_LIBRARY && i == ui.sel_slot)
             pill(x - 2, y - 1, 112, 12, ST_LINE);
-        n[0] = (char)('1' + i);
+        n[0] = i == ui.lib_cur ? '>' : (char)('1' + i);   /* > the loop playing now */
         n[1] = 0;
         cv_text(x + 4, y, &FONT_T, n, sl->n ? c565(acc) : ST_DIM);
         n[0] = 0;

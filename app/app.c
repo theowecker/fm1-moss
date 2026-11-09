@@ -9,17 +9,17 @@
 #include "fastmath.h"
 
 #define SET_MAGIC 0x4D4F5333u            /* "MOS3" */
-enum { PG_HOME, PG_MIX, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_SLOTS, PG_FX, PG_SETUP, NPAGES };
+enum { PG_HOME, PG_MIX, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_FX, PG_SETUP, NPAGES };
 enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, NVIEWS };
-static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "BEAT", "KEYS", "LOOP", "SHAPE", "TAPE", "SLOTS", "FX", "SETUP"};
+static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "BEAT", "KEYS", "LOOP", "SHAPE", "TAPE", "LIBRARY", "FX", "SETUP"};
 static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_FX, B_GLO};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
 static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"};
 static const char *const TAP_NAME[3] = {"PLAY", "LISTEN", "HOLD"};
 static const char *const SPEED_NAME[5] = {"1/2", "1x", "2x", "REV", "REV 1/2"};
 static const char *const PAGE_KNOBS[NPAGES][4] = {
-    {0}, {0}, {"KIT", "PATTERN", "LEVEL", "BASS"}, {"SNAP", "HARMONY", "VOICE", "TAP"}, {"TRACK", "LEVEL", "SHIFT", "ERASE"},
-    {"FADE", "MUTATE", "SMEAR", "SPEED"}, {"WARBLE", "DIRT", "AGE", "SEND"}, {"SLOT", "SAVE", "LOAD", "DELETE"},
+    {0}, {0}, {"KIT", "PATTERN", "LEVEL", "BASS"}, {"SNAP", "HARMONY", "VOICE", "TAP"}, {"LAYER 1", "LAYER 2", "LAYER 3", "LAYER 4"},
+    {"FADE", "MUTATE", "SHIFT", "SPEED"}, {"WARBLE", "DIRT", "AGE", "SMEAR"}, {"LOOP", "", "", "DELETE"},
     {"DELAY", "TIME", "REPEATS", "FILM"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
@@ -28,9 +28,8 @@ static const uint8_t PAGE_STEPS[NPAGES][4] = {{0}, {0}, {MS_NKITS - 1, MS_NPATTE
  * than a nudge, and the gauge shows how close it is */
 #define CONFIRM_SHORT 2
 #define CONFIRM_LONG 6
-static void slot_store(int i);
-static void slot_recall(int i);
-static void slot_delete(int i);
+static void lib_load(int i);
+static void lib_delete(int i);
 static const uint8_t SLEEP_MIN[] = {0, 10, 20, 30, 45, 60, 90};
 #define NSLEEP (sizeof SLEEP_MIN)
 
@@ -53,7 +52,6 @@ static settings_t set;
 
 #define SLOTS_MAGIC 0x534C4F31u          /* "SLO1" */
 #define NSLOTS 8
-static const uint8_t SLOT_KEY[NSLOTS] = {0, 2, 4, 6, 7, 9, 11, 12};   /* the first eight white keys */
 static struct {
     uint32_t magic;
     ms_slot_t s[NSLOTS];
@@ -90,7 +88,7 @@ static void settings_defaults(void)
     }
     set.keys[0] = 1, set.keys[1] = 30, set.keys[2] = 0, set.keys[3] = 1;
     set.loop[0] = 30, set.loop[1] = 25, set.loop[2] = 30, set.loop[3] = 1;
-    set.tape[3] = 50;
+    set.tape[3] = 30;                     /* SMEAR */
     set.fx[0] = 30, set.fx[1] = 2, set.fx[2] = 45, set.fx[3] = 20;
 }
 
@@ -136,14 +134,26 @@ static void send_mode(void)
     ms_root(set.root);
 }
 
+/* TAPE's knobs: warble, dirt and age to the loop's tape; SMEAR is the looper's own */
+static void tape_send(int i)
+{
+    if (i == 3) {
+        ms_loop_set(2, set.tape[3]);
+        ms_loop_fx(3, 50);
+    } else {
+        ms_loop_fx(i, set.tape[i]);
+    }
+}
+
 static void send_all(void)
 {
     int i;
     send_mode();
     for (i = 0; i < 4; i++) {
         ms_keys(i, set.keys[i]);
-        ms_loop_set(i, set.loop[i]);
-        ms_loop_fx(i, set.tape[i]);
+        if (i != 2)
+            ms_loop_set(i, set.loop[i]);
+        tape_send(i);
         ms_fx(i, set.fx[i]);
     }
     ms_space(set.space);
@@ -199,11 +209,12 @@ static struct {
     uint8_t confirm[4];                  /* detents turned so far on an acting knob */
     uint32_t confirm_t;
     uint32_t seq_t;
-    uint8_t save_used, seq_used;         /* a slot key was used during this SAVE or SEQ hold */
     uint8_t save_long;                   /* SAVE held long enough to reset on release */
-    uint32_t slot_keys;                  /* keys pressed while SAVE or SEQ was held: they work the slots */
-    uint8_t slot_mod[NSLOTS];            /* 1 SAVE, 2 SEQ: which one was held when the key went down */
-    int8_t slot_save;                    /* the slot a snapshot is on its way to, -1 none */
+    int8_t slot_save;                    /* the library entry a snapshot is on its way to, -1 none */
+    int8_t lib_cur;                      /* the entry the playing loop is kept in, -1 none */
+    int8_t lib_load_idx;                 /* the entry being loaded, -1 none */
+    uint8_t lib_dirty;                   /* the library changed since SAVE */
+    uint32_t lib_gen, lib_snap_t;
     uint8_t xfer_busy, export_state;
     uint32_t xfer_wait, xfer_t;
     uint32_t sleep_start;                /* plat_ms | 1 when set, 0 off */
@@ -282,17 +293,18 @@ static const char *knob_name(int i)
     return PAGE_KNOBS[set.page][i];
 }
 
-static int confirm_need(int i) { return set.page == PG_SLOTS && i < 3 ? CONFIRM_SHORT : CONFIRM_LONG; }
+static int confirm_need(int i) { (void)i; return CONFIRM_LONG; }
 
 static int knob_value(int i)   /* 0..100 */
 {
     int m = set.mode, steps = PAGE_STEPS[set.page][i];
     uint8_t *v = page_vals(set.page);
     if (set.page == PG_LOOP)
-        return i == 0 ? ui.sel_track * 100 / 3 : i == 1 ? ui.track_lvl[ui.sel_track]
-             : i == 2 ? 50 : ui.confirm[3] * 100 / CONFIRM_LONG;
-    if (set.page == PG_SLOTS)
-        return i == 0 ? ui.sel_slot * 100 / 7 : ui.confirm[i] * 100 / confirm_need(i);
+        return ui.track_lvl[i];
+    if (set.page == PG_LIBRARY)
+        return i == 0 ? ui.sel_slot * 100 / 7 : i == 3 ? ui.confirm[3] * 100 / CONFIRM_LONG : 0;
+    if (set.page == PG_SHAPE && i == 2)
+        return 50;
     if (set.page == PG_HOME)
         return set.macro[m][i];
     if (set.page == PG_MIX)
@@ -312,22 +324,26 @@ static void knob_text(int i, char *t)
 {
     int m = set.mode;
     t[0] = 0;
-    if (set.page == PG_LOOP || set.page == PG_SLOTS) {
-        int sel = set.page == PG_LOOP ? ui.sel_track : ui.sel_slot;
-        int used = set.page == PG_LOOP ? (int)(ms_vis.lp_tracks >> sel & 1u) : slots.s[sel].n > 0;
+    if (set.page == PG_LOOP) {
+        if (!(ms_vis.lp_tracks >> i & 1u))
+            text_cat(t, "-");
+        else if (ui.track_lvl[i])
+            int_text(ui.track_lvl[i], t);
+        else
+            text_cat(t, "OFF");
+        return;
+    }
+    if (set.page == PG_LIBRARY) {
         if (i == 0) {
-            int_text(sel + 1, t);
-            text_cat(t, used ? "" : " EMPTY");
-        } else if (set.page == PG_LOOP && i == 1) {
-            if (ui.track_lvl[sel])
-                int_text(ui.track_lvl[sel], t);
-            else
-                text_cat(t, "OFF");
-        } else if (set.page == PG_LOOP && i == 2) {
-            text_cat(t, "< >");
-        } else {
-            text_cat(t, ui.confirm[i] ? "MORE >" : "TURN >");
+            int_text(ui.sel_slot + 1, t);
+            text_cat(t, slots.s[ui.sel_slot].n ? "" : " EMPTY");
+        } else if (i == 3) {
+            text_cat(t, ui.confirm[3] ? "MORE >" : "TURN >");
         }
+        return;
+    }
+    if (set.page == PG_SHAPE && i == 2) {
+        text_cat(t, "< >");
         return;
     }
     if (set.page == PG_KEYS && i != 1)
@@ -370,49 +386,41 @@ static void sleep_set(int idx)
     ms_sleep_fade(1.0f);
 }
 
-/* the LOOP and SLOTS pages: K1 picks a track or slot, the others set it or act on it; 1 = it spoke for itself */
+/* the LOOP page: a layer's level a knob (down is off); the LIBRARY page: K1 plays a loop, K4 deletes one; SHAPE's
+ * SHIFT moves the whole loop. 1 = it spoke for itself */
 static int pages_act(int i, int32_t d)
 {
-    int loop = set.page == PG_LOOP, sel = loop ? ui.sel_track : ui.sel_slot;
-    if (i == 0) {
-        if (loop)
-            ui.sel_track = (uint8_t)clamp(ui.sel_track + d, 0, 3);
-        else
-            ui.sel_slot = (uint8_t)clamp(ui.sel_slot + d, 0, NSLOTS - 1);
-        ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
+    if (set.page == PG_LOOP) {
+        ui.track_lvl[i] = (uint8_t)clamp(ui.track_lvl[i] + 2 * d, 0, 100);
+        ms_track(i, ui.track_lvl[i]);
         return 0;
     }
-    if (loop && i == 1) {               /* all the way down is off */
-        ui.track_lvl[sel] = (uint8_t)clamp(ui.track_lvl[sel] + 2 * d, 0, 100);
-        ms_track(sel, ui.track_lvl[sel]);
-        return 0;
-    }
-    if (loop && i == 2) {                /* SHIFT: the track a sixteenth later or earlier a click */
-        int32_t n = d < 0 ? -d : d;
-        if (!(ms_vis.lp_tracks >> sel & 1u)) {
-            app_say("TRACK", "EMPTY");
+    if (set.page == PG_SHAPE) {          /* SHIFT: the loop a sixteenth later or earlier a click */
+        int32_t n = d < 0 ? -d : d, t;
+        if (ms_vis.lp_state == MS_LOOP_EMPTY) {
+            app_say("SHIFT", "NO LOOP");
             return 1;
         }
         while (n--)
-            ms_track(sel, d > 0 ? -4 : -5);
+            for (t = 0; t < 4; t++)
+                ms_track(t, d > 0 ? -4 : -5);
         app_say("SHIFT", d > 0 ? "LATER" : "EARLIER");
         return 1;
     }
-    ui.confirm_t = plat_ms();
-    ui.confirm[i] = (uint8_t)clamp(ui.confirm[i] + d, 0, CONFIRM_LONG);
-    if (ui.confirm[i] < confirm_need(i))
-        return 0;
-    ui.confirm[i] = 0;
-    if (loop) {
-        ms_track(sel, -2);
-        app_say("TRACK", "ERASED");
-    } else if (i == 1) {
-        slot_store(sel);
-    } else if (i == 2) {
-        slot_recall(sel);
-    } else {
-        slot_delete(sel);
+    if (i == 0) {                        /* LIBRARY: turning to a loop plays it */
+        ui.sel_slot = (uint8_t)clamp(ui.sel_slot + d, 0, NSLOTS - 1);
+        ui.confirm[3] = 0;
+        lib_load(ui.sel_slot);
+        return 1;
     }
+    if (i != 3)
+        return 1;
+    ui.confirm_t = plat_ms();
+    ui.confirm[3] = (uint8_t)clamp(ui.confirm[3] + d, 0, CONFIRM_LONG);
+    if (ui.confirm[3] < CONFIRM_LONG)
+        return 0;
+    ui.confirm[3] = 0;
+    lib_delete(ui.sel_slot);
     return 1;
 }
 
@@ -425,7 +433,7 @@ static void knob_turn(int i, int32_t d)
     } else if (set.page == PG_MIX) {
         set.mix[m][i] = (uint8_t)clamp(set.mix[m][i] + 2 * d, 0, 100);
         ms_mix(i, set.mix[m][i]);
-    } else if (set.page == PG_LOOP || set.page == PG_SLOTS) {
+    } else if (set.page == PG_LOOP || set.page == PG_LIBRARY || (set.page == PG_SHAPE && i == 2)) {
         if (!pages_act(i, d))
             say_knob(i);
         return;
@@ -440,7 +448,7 @@ static void knob_turn(int i, int32_t d)
         else if (set.page == PG_SHAPE)
             ms_loop_set(i, v[i]);
         else if (set.page == PG_TAPE)
-            ms_loop_fx(i, v[i]);
+            tape_send(i);
         else
             ms_fx(i, v[i]);
     } else if (i == 0) {
@@ -497,11 +505,16 @@ static void page_set(int p)
     app_say(PAGE_NAME[p], "");
 }
 
+/* settings and the loop library to the flash: the sound stops for a moment while it writes, so only on SAVE */
 static void save(void)
 {
-    if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
+    int ok = plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0;
+    if (ok && ui.lib_dirty)
+        ok = plat_store_save(OBJ_SLOTS, &slots, sizeof slots) == 0;
+    if (ok) {
         set_dirty = 0;
-        app_say("SAVED", "");
+        ui.lib_dirty = 0;
+        app_say("SAVED", "SETTINGS AND LOOPS");
     } else {
         app_say("SAVE", "FAILED");
     }
@@ -534,18 +547,9 @@ static void sleep_tick(void)
     }
 }
 
-static int slot_of_key(uint32_t k)
+static void lib_say(int i, const char *what)
 {
-    int i;
-    for (i = 0; i < NSLOTS; i++)
-        if (SLOT_KEY[i] == k)
-            return i;
-    return -1;
-}
-
-static void slot_say(int i, const char *what)
-{
-    char t[8] = "SLOT ";
+    char t[8] = "LOOP ";
     t[5] = (char)('1' + i);
     t[6] = 0;
     app_say(t, what);
@@ -553,61 +557,75 @@ static void slot_say(int i, const char *what)
 
 static int xfer_start(void)
 {
-    if (ui.xfer_busy) {
-        app_say("SLOTS", "BUSY");
+    if (ui.xfer_busy)
         return 0;
-    }
     ui.xfer_busy = 1;
     ui.xfer_wait = ms_vis.xfer_seq;
     ui.xfer_t = plat_ms();
     return 1;
 }
 
-static void slot_store(int i)
-{
-    if (!xfer_start())
-        return;
-    ui.slot_save = (int8_t)i;
-    if (ms_loop_snap() != 0) {
-        ui.xfer_busy = 0;
-        ui.slot_save = -1;
-        slot_say(i, "TRY AGAIN");
-    }
-}
-
-static void slot_recall(int i)
+static void lib_load(int i)
 {
     if (!slots.s[i].n) {
-        slot_say(i, "EMPTY");
+        lib_say(i, "EMPTY");
         return;
     }
-    if (!xfer_start())
+    if (ui.lib_cur == i && ms_vis.lp_state != MS_LOOP_EMPTY) {
+        lib_say(i, "PLAYING");
         return;
+    }
+    if (!xfer_start()) {
+        app_say("LIBRARY", "BUSY");
+        return;
+    }
     ms_slot_xfer = slots.s[i];
     if (ms_loop_load() != 0) {
         ui.xfer_busy = 0;
-        slot_say(i, "TRY AGAIN");
         return;
     }
-    slot_say(i, "LOADED");
+    ui.lib_load_idx = (int8_t)i;
+    lib_say(i, "PLAYING");
 }
 
-/* slot i becomes *v in the flash, and in RAM only if the flash took it */
-static int slot_write(int i, const ms_slot_t *v)
+static void lib_delete(int i)
 {
-    ms_slot_t old = slots.s[i];
-    slots.s[i] = *v;
-    if (plat_store_save(OBJ_SLOTS, &slots, sizeof slots) == 0)
-        return 1;
-    slots.s[i] = old;
-    return 0;
+    memset(&slots.s[i], 0, sizeof slots.s[i]);
+    if (ui.lib_cur == i)
+        ui.lib_cur = -1;
+    ui.lib_dirty = 1;
+    lib_say(i, "DELETED");
 }
 
-static void slot_delete(int i)
+/* the library follows the loop by itself: a new loop goes in at the top (the rest move down, the eighth drops off),
+ * and every few seconds the playing loop's entry is brought up to date. Only RAM: SAVE writes it to the flash */
+static void lib_tick(uint32_t now)
 {
-    ms_slot_t empty;
-    memset(&empty, 0, sizeof empty);
-    slot_say(i, slot_write(i, &empty) ? "DELETED" : "NOT DELETED");
+    if (ms_vis.lp_gen != ui.lib_gen) {
+        ui.lib_gen = ms_vis.lp_gen;
+        if (ui.lib_load_idx >= 0) {
+            ui.lib_cur = ui.lib_load_idx;
+            ui.lib_load_idx = -1;
+        } else {
+            int i;
+            for (i = NSLOTS - 1; i > 0; i--)
+                slots.s[i] = slots.s[i - 1];
+            memset(&slots.s[0], 0, sizeof slots.s[0]);
+            ui.lib_cur = 0;
+            ui.sel_slot = 0;
+        }
+        ui.lib_snap_t = now - 2500u;     /* its first copy soon */
+    }
+    if (ms_vis.lp_state == MS_LOOP_EMPTY)
+        ui.lib_cur = -1;
+    if (ui.lib_cur >= 0 && ms_vis.lp_state == MS_LOOP_PLAY && now - ui.lib_snap_t >= 3000u && xfer_start()) {
+        ui.lib_snap_t = now;
+        ui.slot_save = ui.lib_cur;
+        if (ms_loop_snap() != 0) {
+            ui.xfer_busy = 0;
+            ui.slot_save = -1;
+        }
+    }
 }
 
 /* 7 bytes in 8, the high bits first, as SysEx carries them */
@@ -640,6 +658,16 @@ static void export_slot(int idx, const ms_slot_t *s)
     plat_sysex_end();
 }
 
+static int slot_same(const ms_slot_t *a, const ms_slot_t *b)
+{
+    const uint8_t *x = (const uint8_t *)a, *y = (const uint8_t *)b;
+    uint32_t i;
+    for (i = 0; i < sizeof *a; i++)
+        if (x[i] != y[i])
+            return 0;
+    return 1;
+}
+
 /* a snapshot or load finished: store it, or send everything out */
 static void xfer_done(void)
 {
@@ -658,11 +686,10 @@ static void xfer_done(void)
     if (ui.slot_save >= 0) {
         int i = ui.slot_save;
         ui.slot_save = -1;
-        if (!ms_slot_xfer.n) {
-            slot_say(i, "NO LOOP YET");
-            return;
+        if (ms_slot_xfer.n && !slot_same(&slots.s[i], &ms_slot_xfer)) {
+            slots.s[i] = ms_slot_xfer;
+            ui.lib_dirty = 1;
         }
-        slot_say(i, slot_write(i, &ms_slot_xfer) ? "SAVED" : "NOT SAVED");
     } else if (ui.export_state == 2) {
         static const uint8_t done[6] = {0xF0, 0x7D, 0x4D, 0x4F, 0x03, 0xF7};
         int i;
@@ -701,27 +728,7 @@ static void input(void)
     int32_t e;
     for (k = 0; k < NKEYS; k++) {
         uint32_t bit = 1u << k;
-        int note = 53 + (int)k + 12 * set.octave, sl = slot_of_key(k);
-        int mod = (btn >> B_SAVE & 1u) ? 1 : (btn >> B_SEQ & 1u) ? 2 : 0;
-        if ((keys & bit) && !(ui.keys & bit) && mod && sl >= 0) {
-            ui.slot_keys |= bit;
-            ui.slot_mod[sl] = (uint8_t)mod;
-            if (mod == 1)
-                ui.save_used = 1;
-            else
-                ui.seq_used = 1;
-            continue;
-        }
-        if (ui.slot_keys & bit) {        /* SAVE + key saves there, SEQ + key loads: on release, so a slip can be undone */
-            if (!(keys & bit)) {
-                ui.slot_keys &= ~bit;
-                if (ui.slot_mod[sl] == 1)
-                    slot_store(sl);
-                else
-                    slot_recall(sl);
-            }
-            continue;
-        }
+        int note = 53 + (int)k + 12 * set.octave;
         if ((keys & bit) && !(ui.keys & bit)) {
             ui.key_note[k] = (uint8_t)note;
             if (set.keys[3] == 2) {      /* HOLD: say what the tap does before the engine does it */
@@ -758,7 +765,6 @@ static void input(void)
             break;
         case B_SAVE:
             ui.save_t = now | 1u;
-            ui.save_used = 0;
             ui.save_long = 0;
             break;
         case B_HOME:
@@ -766,7 +772,6 @@ static void input(void)
             break;
         case B_SEQ:
             ui.seq_t = now | 1u;
-            ui.seq_used = 0;
             break;
         case B_SEL:
             page_set(set.page == PG_MIX ? PG_BEAT : PG_MIX);
@@ -783,7 +788,7 @@ static void input(void)
             }
             break;
         case B_LFO:
-            page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_TAPE : set.page == PG_TAPE ? PG_SLOTS : PG_LOOP);
+            page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_TAPE : set.page == PG_TAPE ? PG_LIBRARY : PG_LOOP);
             break;
         case B_FX:
             page_set(PG_FX);
@@ -810,7 +815,7 @@ static void input(void)
     }
     if (ui.seq_t && !(btn >> B_SEQ & 1u)) {   /* SEQ: a press switches the view; held with keys, loads slots */
         ui.seq_t = 0;
-        if (!ui.seq_used) {
+        {
             set.view = (uint8_t)((set.view + 1u) % NVIEWS);
             set_dirty = 1;
             ui.label_until = now + 3000u;
@@ -819,14 +824,13 @@ static void input(void)
     }
     if (ui.save_t) {                     /* SAVE: a tap saves; held two seconds and let go, resets the scene */
         if (btn >> B_SAVE & 1u) {
-            if (!ui.save_used && !ui.save_long && now - ui.save_t >= 2000u) {
+            if (!ui.save_long && now - ui.save_t >= 2000u) {
                 ui.save_long = 1;
                 app_say("LET GO TO", "RESET SCENE");
             }
         } else {
             ui.save_t = 0;
-            if (ui.save_used) {
-            } else if (ui.save_long) {
+            if (ui.save_long) {
                 scene_recipe(set.mode);
                 send_all();
                 set_dirty = 1;
@@ -877,7 +881,7 @@ static void input(void)
         uint32_t lp = ms_vis.lp_state, lit;
         int loop_lit = lp == MS_LOOP_PLAY ? (ms_vis.lp_keep || (now / 700u & 1u))
                      : (lp == MS_LOOP_REC || lp == MS_LOOP_DUB) && (now / 200u & 1u);
-        lit = (ui.playing ? 1u << B_PLAY : 0u) | (ui.frozen ? 1u << B_ARP : 0u) | (set_dirty ? 1u << B_SAVE : 0u)
+        lit = (ui.playing ? 1u << B_PLAY : 0u) | (ui.frozen ? 1u << B_ARP : 0u) | (set_dirty || ui.lib_dirty ? 1u << B_SAVE : 0u)
             | (loop_lit ? 1u << B_REC : 0u) | 1u << PAGE_BTN[set.page] | btn;
         uint32_t chord = 0, held = 0, mask = ms_vis.chord_mask;
         for (k = 0; k < NKEYS; k++) {
@@ -887,15 +891,7 @@ static void input(void)
             if (set.keys[3] == 2 && (ms_vis.pool >> (note % 12u) & 1u))   /* HOLD: the notes the music plays */
                 held |= 1u << k;
         }
-        if (btn & (1u << B_SAVE | 1u << B_SEQ)) {
-            uint32_t on = 0, i;
-            for (i = 0; i < NSLOTS; i++)
-                if (slots.s[i].n)
-                    on |= 1u << SLOT_KEY[i];
-            plat_lights(lit, on, 0, 0, 1);
-        } else {
-            plat_lights(lit, keys | held, 0, set.keys[3] == 2 ? 0u : chord, 1);
-        }
+        plat_lights(lit, keys | held, 0, set.keys[3] == 2 ? 0u : chord, 1);
     }
 }
 
@@ -946,7 +942,9 @@ void app_ui_init(void)
     static int started;
     if (!started) {
         ui.track_lvl[0] = ui.track_lvl[1] = ui.track_lvl[2] = ui.track_lvl[3] = 70;
-        ui.slot_save = -1;                      /* also called after an aborted update: keep play and sleep state */
+        ui.slot_save = -1;
+        ui.lib_cur = ui.lib_load_idx = -1;
+        ui.lib_gen = ms_vis.lp_gen;                      /* also called after an aborted update: keep play and sleep state */
         started = 1;
         ui.playing = 1;
         if (set.sleep)
@@ -974,6 +972,7 @@ void app_frame(void)
     }
     track_events(now);
     xfer_done();
+    lib_tick(now);
     if (ui.confirm_t && now - ui.confirm_t > 1500u) {   /* a half turn left alone does not count later */
         ui.confirm_t = 0;
         ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
@@ -1013,7 +1012,9 @@ int app_expect(const char *what, int *got)
         *got = n;
     } else if (!strcmp(what, "held"))
         *got = __builtin_popcount(ms_vis.pool);
-    else if (!strncmp(what, "slot", 4))   /* slotN: how many notes slot N holds */
+    else if (!strcmp(what, "libcur"))
+        *got = ui.lib_cur;
+    else if (!strncmp(what, "slot", 4))   /* slotN: how many notes library entry N holds */
         *got = slots.s[atoi(what + 4) % NSLOTS].n;
     else if (!strcmp(what, "keep"))
         *got = ms_vis.lp_keep;
