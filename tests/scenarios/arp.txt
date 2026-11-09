@@ -1,0 +1,42 @@
+# ENV on the KEYS page steps through how the keys behave: PLAY, LISTEN, HOLD
+wait 600
+tap ENV
+wait 50
+expect page 3
+expect tap 1
+tap ENV
+wait 50
+expect tap 2
+tapkey 7
+wait 100
+expect held 1
+tapkey 7
+wait 100
+expect held 0
+tap ENV
+wait 50
+expect tap 0
+# ARP: tap records, tap loops, tap adds a layer, tap finishes, a one second hold clears
+tap REC
+wait 50
+expect loop 1
+tapkey 7
+wait 300
+tap REC
+wait 50
+expect loop 2
+tap REC
+wait 50
+expect loop 3
+tapkey 9
+wait 100
+tap REC
+wait 50
+expect loop 2
+expect tracks 3
+shot looping.png
+press REC
+wait 1100
+release REC
+wait 50
+expect loop 0

@@ -1,0 +1,21 @@
+# MOSS-1's build settings (fm1-base's tools/build.py: ./build.sh)
+name = "MOSS"                  # the build's files: moss.fwsc, moss-X.Y.fwsc
+id_prefix = "FM-1_44"          # package identity: dev FM-1_4400, releases FM-1_44XXYYZZ
+usb_manufacturer = "MOSS-1"
+usb_product = "MOSS-1 FM-1"
+ble = false
+words = "words.tsv"
+include = ["dsp"]
+o2 = ["dsp/moss.c"]
+# the site
+tagline = "lofi, nature sounds and ambient loops for the FM-1"
+repo = "https://github.com/theowecker/fm1-moss"
+licence = "MPL-2.0"
+credits = "Built on fm1-base and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments)."
+# firmware.json, for firmware hubs (fm1-base docs/FIRMWARE-JSON.md)
+author = "Theo Wecker"
+description = "Ambient firmware with three modes. LOFI plays electric piano chords over a slow beat with tape wobble and vinyl crackle. SCAPES plays nature sounds (forest, rain, shore, night, storm, campfire, creek) with a quiet pad. DRIFT plays pads and bells on loops of different lengths. Play the keys and the music follows you: notes loop, fade and change, and a looper with four layers and eight saved slots keeps what you like. Six drum kits, a backing bass, six reverb spaces, a tape FILM knob, a sleep timer and a pixel art picture for every scene."
+tags = ["ambient", "generative", "chords"]
+install = "https://theowecker.github.io/fm1-moss/install/"
+site = "https://theowecker.github.io/fm1-moss/"
+screenshot = "app/docs/img/drift-dusk.png"

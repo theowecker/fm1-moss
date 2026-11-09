@@ -1,0 +1,14 @@
+# a fast turn of MUTE ends muted, whatever the render saw in between
+wait 600
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+expect loop 2
+tap LFO
+wait 50
+expect page 4
+expect muted 0
+turn K3 -2 1
+wait 50
+expect muted 1

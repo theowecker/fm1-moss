@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOSS-1 Tape</title>
+<style>
+  :root {
+    --bg: #10121c; --panel: #181b28; --line: #2a2e40; --text: #ece4ce; --soft: #9696a8; --red: #f06060; --cream: #ece4ce;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 ui-monospace, Menlo, monospace; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 18px; letter-spacing: .08em; margin: 0 0 4px; }
+  .sub { color: var(--soft); margin: 0 0 24px; }
+  .deck { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  select, button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  select { flex: 1; min-width: 0; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--soft); }
+  #rec { width: 96px; height: 96px; border-radius: 50%; border: 3px solid var(--line); background: var(--bg); display: grid; place-items: center; }
+  #rec span { width: 36px; height: 36px; border-radius: 50%; background: var(--red); transition: border-radius .15s; }
+  #rec.on span { border-radius: 6px; }
+  #rec.on { border-color: var(--red); }
+  .meter { flex: 1; height: 10px; background: var(--bg); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
+  .meter i { display: block; height: 100%; width: 0; background: var(--cream); transition: width .05s; }
+  #time { font-size: 28px; min-width: 110px; }
+  .status { color: var(--soft); margin-top: 12px; min-height: 1.4em; }
+  ul { list-style: none; padding: 0; margin: 24px 0 0; }
+  li { display: flex; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  li .name { flex: 1; min-width: 140px; background: none; border: none; padding: 4px 0; color: var(--text); font: inherit; }
+  li .len { color: var(--soft); }
+  li audio { width: 100%; height: 32px; }
+  .empty { color: var(--soft); padding: 16px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MOSS-1 TAPE</h1>
+  <p class="sub">Record the FM-1 over USB, and take its saved loops off as MIDI files. Takes stay in this browser until you delete them.</p>
+  <div class="deck">
+    <div class="row">
+      <select id="input" aria-label="Audio input"></select>
+      <button id="connect">Connect</button>
+    </div>
+    <div class="row" style="margin-top:20px">
+      <button id="rec" aria-label="Record (space)" disabled><span></span></button>
+      <div style="flex:1">
+        <div id="time">0:00</div>
+        <div class="meter"><i id="lvl"></i></div>
+      </div>
+    </div>
+    <div class="status" id="status">Plug in the FM-1, then press Connect.</div>
+  </div>
+  <ul id="takes"></ul>
+  <h1 style="margin-top:40px">LOOPS</h1>
+  <p class="sub">The eight loop slots, and the loop playing now, as MIDI files. Each loop track is its own MIDI track.</p>
+  <div class="deck">
+    <div class="row"><button id="read">Read loops</button><span class="status" id="mstatus" style="margin:0"></span></div>
+    <ul id="loops" style="margin-top:12px"></ul>
+  </div>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let ctx, stream, src, node, recording = false, chunks = [], frames = 0, startedAt = 0, timer;
+
+  /* takes live in IndexedDB so a reload keeps them; without it they live in memory */
+  const store = (() => {
+    let db = null, mem = [];
+    const open = () => new Promise(res => {
+      try {
+        const r = indexedDB.open('moss-tape', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('takes', { keyPath: 'id' });
+        r.onsuccess = () => { db = r.result; res(); };
+        r.onerror = () => res();
+      } catch (e) { res(); }
+    });
+    const tx = mode => db.transaction('takes', mode).objectStore('takes');
+    const req = r => new Promise(res => { r.onsuccess = () => res(r.result); r.onerror = () => res(null); });
+    return {
+      open,
+      all: async () => db ? (await req(tx('readonly').getAll())) || [] : mem,
+      /* resolves true once stored; false means it was not, and the caller keeps the take another way */
+      put: t => db ? new Promise(res => { const r = tx('readwrite').put(t); r.onsuccess = () => res(true); r.onerror = () => res(false); })
+        : (mem = mem.filter(x => x.id !== t.id).concat(t), Promise.resolve(true)),
+      del: async id => db ? req(tx('readwrite').delete(id)) : (mem = mem.filter(x => x.id !== id)),
+    };
+  })();
+
+  async function listInputs() {
+    try { (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach(t => t.stop()); } catch (e) {}
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+    const sel = $('input');
+    sel.innerHTML = '';
+    devs.forEach(d => {
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || 'Audio input';
+      if (/moss|fm-?1/i.test(d.label)) o.selected = true;
+      sel.appendChild(o);
+    });
+    return devs.some(d => /moss|fm-?1/i.test(d.label));
+  }
+
+  const WORKLET = `class Tap extends AudioWorkletProcessor {
+    process(inputs) {
+      const ch = inputs[0];
+      if (ch.length) this.port.postMessage([ch[0].slice(0), (ch[1] || ch[0]).slice(0)]);
+      return true;
+    }
+  }
+  registerProcessor('tap', Tap);`;
+
+  async function connect() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({ audio: {
+      deviceId: { exact: $('input').value }, channelCount: 2,
+      echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+    } });
+    const rate = stream.getAudioTracks()[0].getSettings().sampleRate || 44100;
+    if (ctx) ctx.close();
+    ctx = new AudioContext({ sampleRate: rate });
+    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })));
+    src = ctx.createMediaStreamSource(stream);
+    node = new AudioWorkletNode(ctx, 'tap', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2 });
+    node.port.onmessage = e => {
+      const [l, r] = e.data;
+      let peak = 0;
+      for (let i = 0; i < l.length; i++) peak = Math.max(peak, Math.abs(l[i]), Math.abs(r[i]));
+      $('lvl').style.width = Math.min(100, peak * 100) + '%';
+      if (recording) {                   /* 16-bit as it comes: an hour stays a few hundred MB, not gigabytes */
+        const pcm = new Int16Array(l.length * 2);
+        for (let i = 0; i < l.length; i++) {
+          pcm[2 * i] = Math.max(-1, Math.min(1, l[i])) * 32767;
+          pcm[2 * i + 1] = Math.max(-1, Math.min(1, r[i])) * 32767;
+        }
+        chunks.push(pcm);
+        frames += l.length;
+      }
+    };
+    src.connect(node);
+    await ctx.resume();
+    $('rec').disabled = false;
+    $('status').textContent = 'Ready. Press the button or space to record.';
+  }
+
+  function wav(parts, n, rate) {
+    const head = new ArrayBuffer(44), v = new DataView(head);
+    const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 4, true); w(8, 'WAVEfmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 4, true); v.setUint16(32, 4, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n * 4, true);
+    return new Blob([head, ...parts], { type: 'audio/wav' });
+  }
+
+  const download = (blob, name) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  };
+
+  const clock = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  async function toggle() {
+    if (!ctx || $('rec').disabled) return;
+    if (!recording) {
+      chunks = []; frames = 0; recording = true; startedAt = Date.now();
+      $('rec').classList.add('on');
+      $('status').textContent = 'Recording.';
+      timer = setInterval(() => { $('time').textContent = clock((Date.now() - startedAt) / 1000); }, 250);
+      return;
+    }
+    recording = false;
+    clearInterval(timer);
+    $('rec').classList.remove('on');
+    if (!frames) {
+      $('status').textContent = 'No sound came in. Check the input, then Connect again.';
+      return;
+    }
+    const d = new Date(), pad = x => String(x).padStart(2, '0');
+    const take = {
+      id: d.getTime(),
+      name: `moss ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}`,
+      secs: frames / ctx.sampleRate,
+      blob: wav(chunks, frames, ctx.sampleRate),
+    };
+    chunks = [];
+    if (await store.put(take)) {
+      $('status').textContent = `Saved ${clock(take.secs)}.`;
+    } else {
+      download(take.blob, `${take.name}.wav`);
+      $('status').textContent = 'The browser would not keep it, so it was downloaded.';
+    }
+    render();
+  }
+
+  async function render() {
+    const takes = (await store.all()).sort((a, b) => b.id - a.id), ul = $('takes');
+    ul.innerHTML = takes.length ? '' : '<li class="empty">No takes yet.</li>';
+    for (const t of takes) {
+      const li = document.createElement('li'), url = URL.createObjectURL(t.blob);
+      li.innerHTML = `<input class="name" aria-label="Take name"><span class="len">${clock(t.secs)}</span>
+        <button data-a="dl">Download</button><button data-a="del">Delete</button><audio controls preload="none"></audio>`;
+      li.querySelector('.name').value = t.name;
+      li.querySelector('.name').onchange = e => { t.name = e.target.value; store.put(t); };
+      li.querySelector('audio').src = url;
+      li.querySelector('[data-a=dl]').onclick = () => {
+        const a = document.createElement('a');
+        a.href = url; a.download = `${t.name}.wav`; a.click();
+      };
+      li.querySelector('[data-a=del]').onclick = async () => {
+        if (confirm(`Delete "${t.name}"?`)) { await store.del(t.id); render(); }
+      };
+      ul.appendChild(li);
+    }
+  }
+
+  $('connect').onclick = () => connect().catch(e => { $('status').textContent = 'Could not open that input: ' + e.message; });
+  $('rec').onclick = toggle;
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !e.target.matches('input, select, button')) { e.preventDefault(); toggle(); }
+  });
+  window.addEventListener('beforeunload', e => { if (recording) e.preventDefault(); });
+
+  /* loops: F0 7D 4D 4F 01 F7 asks; each slot comes back as F0 7D 4D 4F 02 slot <7-bit packed bytes> F7, then 03 */
+  const unpack7 = d => {
+    const out = [];
+    for (let i = 0; i < d.length; i += 8) {
+      const hi = d[i];
+      for (let j = 1; j < 8 && i + j < d.length; j++) out.push(d[i + j] | ((hi >> (j - 1)) & 1) << 7);
+    }
+    return Uint8Array.from(out);
+  };
+
+  const parseSlot = b => {
+    const v = new DataView(b.buffer), n = b.length >= 8 ? b[2] : 0, ev = [];
+    for (let i = 0; i < n && 8 + i * 6 + 6 <= b.length; i++) {
+      const o = 8 + i * 6;
+      ev.push({ t: v.getUint16(o, true), dur: v.getUint16(o + 2, true), note: b[o + 4], vel: b[o + 5] >> 2, track: b[o + 5] & 3 });
+    }
+    return { len: b.length >= 2 ? v.getUint16(0, true) : 0, tempo: b[4] || 72, mute: b[3], ev };
+  };
+
+  function midiFile(loop) {
+    const ppq = 480, tick = ms => Math.round(ms * loop.tempo * ppq / 60000);
+    const vlq = n => { const b = [n & 0x7f]; while ((n >>= 7)) b.unshift((n & 0x7f) | 0x80); return b; };
+    const chunk = (id, data) => [...id].map(c => c.charCodeAt(0)).concat([24, 16, 8, 0].map(s => (data.length >> s) & 255), data);
+    const text = (type, str) => [0, 0xff, type, ...vlq(str.length), ...[...str].map(c => c.charCodeAt(0))];
+    const us = Math.round(60e6 / loop.tempo);
+    const tracks = [[...text(3, 'MOSS-1 loop'), 0, 0xff, 0x51, 3, us >> 16 & 255, us >> 8 & 255, us & 255,
+      0, 0xff, 0x58, 4, 4, 2, 24, 8, 0, 0xff, 0x2f, 0]];
+    for (let t = 0; t < 4; t++) {
+      const notes = loop.ev.filter(e => e.track === t);
+      if (!notes.length) continue;
+      const evs = [];
+      for (const e of notes) {
+        const vel = Math.min(127, e.vel * 2 + 1);
+        evs.push({ at: tick(e.t), d: [0x90 | t, e.note, vel] });
+        evs.push({ at: tick(e.t + Math.max(e.dur, 60)), d: [0x80 | t, e.note, 0] });
+      }
+      evs.sort((a, b) => a.at - b.at || (a.d[0] & 0xf0) - (b.d[0] & 0xf0));
+      const data = [...text(3, `Track ${t + 1}${loop.mute >> t & 1 ? ' (muted)' : ''}`)];
+      let now = 0;
+      for (const e of evs) { data.push(...vlq(e.at - now), ...e.d); now = e.at; }
+      data.push(...vlq(Math.max(0, tick(loop.len) - now)), 0xff, 0x2f, 0);
+      tracks.push(data);
+    }
+    const head = chunk('MThd', [0, 1, 0, tracks.length, ppq >> 8, ppq & 255]);
+    return new Blob([Uint8Array.from(head.concat(...tracks.map(d => chunk('MTrk', d))))], { type: 'audio/midi' });
+  }
+
+  function showLoops(got) {
+    const ul = $('loops');
+    ul.innerHTML = '';
+    for (let i = 0; i <= 8; i++) {
+      const loop = got[i], li = document.createElement('li');
+      const name = i < 8 ? `Slot ${i + 1}` : 'Playing now';
+      const has = loop && loop.ev.length;
+      li.innerHTML = `<span class="name">${name}</span><span class="len">${has ? `${loop.ev.length} notes, ${(loop.len / 1000).toFixed(1)}s` : 'empty'}</span>`;
+      if (has) {
+        const b = document.createElement('button');
+        b.textContent = 'Download .mid';
+        b.onclick = () => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(midiFile(loop));
+          a.download = `moss-${i < 8 ? 'slot-' + (i + 1) : 'now'}.mid`;
+          a.click();
+        };
+        li.appendChild(b);
+      }
+      ul.appendChild(li);
+    }
+  }
+
+  async function readLoops() {
+    let access;
+    try { access = await navigator.requestMIDIAccess({ sysex: true }); }
+    catch (e) { $('mstatus').textContent = 'MIDI was not allowed. Chrome asks the first time.'; return; }
+    const pick = list => [...list.values()].find(p => /moss|fm-?1/i.test(p.name));
+    const out = pick(access.outputs), inp = pick(access.inputs);
+    if (!out || !inp) { $('mstatus').textContent = 'No FM-1 found over MIDI. Is it plugged in?'; return; }
+    $('read').disabled = true;
+    const got = [];
+    $('mstatus').textContent = 'Reading...';
+    const done = new Promise(res => {
+      const t = setTimeout(() => res(false), 4000);
+      inp.onmidimessage = m => {
+        const d = m.data;
+        if (d[0] !== 0xf0 || d[1] !== 0x7d || d[2] !== 0x4d || d[3] !== 0x4f) return;
+        if (d[4] === 2) got[d[5]] = parseSlot(unpack7(d.slice(6, d.length - 1)));
+        if (d[4] === 3) { clearTimeout(t); res(true); }
+      };
+    });
+    out.send([0xf0, 0x7d, 0x4d, 0x4f, 0x01, 0xf7]);
+    const ok = await done;
+    inp.onmidimessage = null;
+    $('read').disabled = false;
+    $('mstatus').textContent = ok ? 'Done.' : 'No answer. Is MOSS-1 on the FM-1?';
+    if (ok) showLoops(got);
+  }
+
+  $('read').onclick = readLoops;
+
+  store.open().then(async () => {
+    render();
+    if (!navigator.mediaDevices) { $('status').textContent = 'This browser cannot record audio. Use Chrome.'; return; }
+    const found = await listInputs();
+    $('status').textContent = found ? 'Found the FM-1. Press Connect.' : 'Pick the FM-1 from the list, then press Connect.';
+  });
+})();
+</script>
+</body>
+</html>

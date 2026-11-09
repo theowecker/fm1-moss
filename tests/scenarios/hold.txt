@@ -1,0 +1,22 @@
+# HOLD: a tap turns a note on and it stays; a second tap turns it off
+wait 600
+tap ENV
+turn K4 1
+wait 50
+expect page 3
+tapkey 7
+wait 50
+tapkey 11
+wait 3000
+expect held 2
+wav hold.wav
+wait 4000
+wavstop
+expect peak_db_min -30
+tapkey 7
+tapkey 11
+wait 100
+expect held 0
+wait 4000
+turn K4 -2
+wait 50

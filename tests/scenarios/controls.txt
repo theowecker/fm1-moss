@@ -1,0 +1,72 @@
+# the knobs, play and freeze, the keys, MIDI in, saving across a restart, the scene's recipe
+wait 600
+turn PRESET 4
+wait 1200
+expect mode 0
+turn K2 5
+wait 100
+expect macro1 55
+expect dirty 1
+tap SEL
+turn K1 -10
+wait 100
+expect mix0 50
+tap GLO
+turn K1 4
+wait 100
+expect tempo 86
+turn K2 3
+expect root 3
+turn K4 2
+wait 100
+expect sleep 2
+shot sleep.png
+tap SAVE
+wait 50
+expect dirty 0
+reboot
+wait 800
+expect mode 0
+expect macro1 55
+expect tempo 86
+expect root 3
+expect sleep 2
+# held, SAVE puts the scene back to its recipe
+press SAVE
+wait 2100
+release SAVE
+wait 50
+expect macro1 45
+expect tempo 82
+tap PLAY
+wait 3000
+expect playing 0
+tap PLAY
+wait 100
+expect playing 1
+tap ARP
+wait 50
+expect frozen 1
+tap ARP
+wait 50
+expect frozen 0
+tap OCT+
+expect octave 1
+key 7 down
+wait 50
+expect_out USB 90 48 60
+key 7 up
+wait 50
+midi 90 3C 64
+wait 30
+midi 80 3C 00
+wait 30
+expect notes >2
+# a key held across an octave change sends its own note-off, not the new octave's
+key 7 down
+wait 50
+tap OCT-
+wait 50
+key 7 up
+wait 50
+expect_out USB 80 48 00

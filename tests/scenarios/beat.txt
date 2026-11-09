@@ -1,0 +1,42 @@
+# a beat in DRIFT: SEL twice reaches BEAT; every kit, a few patterns, the backing bass
+wait 600
+tap SEL
+tap SEL
+wait 100
+expect page 2
+expect kit 0
+turn K1 1
+wait 50
+expect kit 1
+turn K2 4
+turn K4 3
+wav drift-soft-bossa-walk.wav
+wait 6000
+wavstop
+expect peak_db_min -30
+shot beat-page.png
+turn K1 1
+wav drift-lofi.wav
+wait 4000
+wavstop
+turn K1 1
+turn K2 -3
+wav drift-brush.wav
+wait 4000
+wavstop
+turn K1 1
+wav drift-pulse.wav
+wait 4000
+wavstop
+turn K1 1
+wav drift-tick.wav
+wait 4000
+wavstop
+turn K1 1
+wav drift-wood.wav
+wait 4000
+wavstop
+expect kit 6
+tap SEQ
+wait 200
+shot beat-studio.png

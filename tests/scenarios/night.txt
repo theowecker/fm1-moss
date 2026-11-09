@@ -1,0 +1,19 @@
+# the storm: thunder comes; the night: an owl and crickets
+wait 600
+turn PRESET -7
+wait 1200
+turn PRESET 4
+wait 1500
+expect scene 4
+wav storm.wav
+tap EDIT
+wait 20000
+wavstop
+expect flashes >0
+turn PRESET -1
+wait 1500
+expect scene 3
+wav night.wav
+wait 40000
+wavstop
+expect peak_db_min -40

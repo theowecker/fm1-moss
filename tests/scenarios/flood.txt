@@ -1,0 +1,25 @@
+# turning PRESETS fast while saving a slot: nothing is dropped, and slots still work after
+wait 600
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+press SAVE
+key 0 down
+wait 10
+turn PRESET 3 1
+key 0 up
+release SAVE
+wait 200
+expect loop 2
+expect slot0 >1
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+expect loop 2
+press SAVE
+tapkey 2
+release SAVE
+wait 200
+expect slot1 >1

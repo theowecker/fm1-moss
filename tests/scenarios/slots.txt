@@ -1,0 +1,81 @@
+# loop slots: SAVE + key stores the loop, SEQ + key brings it back, a long SAVE + key deletes it; SysEx sends them out
+wait 600
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+expect loop 2
+press SAVE
+tapkey 0
+release SAVE
+wait 100
+expect slot0 2
+expect view 0
+press REC
+wait 1600
+release REC
+wait 50
+expect loop 0
+press SEQ
+tapkey 0
+release SEQ
+wait 100
+expect loop 2
+expect loopn 2
+expect view 0
+reboot
+wait 800
+expect slot0 2
+sysex_out
+sysex F0 7D 4D 4F 01 F7
+wait 200
+expect_sysex F0 7D 4D 4F 03 F7
+tap LFO
+tap LFO
+tap LFO
+turn K4 6
+wait 50
+expect slot0 0
+reboot
+wait 800
+expect slot0 0
+# the SLOTS page does the same with the knobs: K1 picks, K2 saves, K3 loads, K4 deletes after a long turn
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+tap LFO
+tap LFO
+tap LFO
+wait 50
+expect page 6
+turn K1 2
+turn K2 2
+wait 200
+expect slot2 >1
+press REC
+wait 1100
+release REC
+wait 50
+expect loop 0
+turn K3 2
+wait 200
+expect loop 2
+tap SEQ
+wait 200
+shot slots-page.png
+tap SEQ
+turn K4 3
+wait 50
+expect slot2 >1
+turn K4 3
+wait 50
+expect slot2 0
+# the LOOP page: K1 picks a track, K4 erases it after a long turn
+tap LFO
+wait 50
+expect page 4
+expect tracks 3
+turn K4 6
+wait 100
+expect tracks 2

@@ -1,0 +1,53 @@
+# a first look and listen: it plays from power-on, then every mode and the pages
+wav tour.wav
+wait 600
+expect mode 2
+expect playing 1
+wait 8000
+shot drift.png
+expect notes >3
+turn PRESET 4
+wait 1500
+expect mode 0
+wait 6000
+shot lofi.png
+expect notes >20
+turn PRESET 4
+wait 1500
+expect mode 1
+wait 8000
+shot scapes-forest.png
+turn PRESET 1
+wait 1500
+expect scene 1
+wait 6000
+shot scapes-rain.png
+turn PRESET 1
+wait 6000
+shot scapes-shore.png
+turn PRESET 1
+wait 6000
+shot scapes-night.png
+turn PRESET 1
+wait 12000
+shot scapes-storm.png
+turn PRESET 1
+wait 6000
+shot scapes-hearth.png
+turn PRESET 1
+wait 6000
+shot scapes-creek.png
+wavstop
+expect peak_db_max -0.3
+expect peak_db_min -30
+tap SEL
+wait 100
+expect page 1
+shot mix.png
+tap GLO
+wait 100
+expect page 8
+shot setup.png
+turn SELECT 1
+wait 100
+expect page 0

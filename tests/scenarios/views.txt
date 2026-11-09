@@ -1,0 +1,85 @@
+# every scene in the SCENE view (PRESETS walks them all, from DRIFT's first), then the STUDIO view
+wait 600
+expect view 0
+wait 5000
+shot scene-20.png
+turn PRESET 1
+wait 5000
+shot scene-21.png
+turn PRESET 1
+wait 5000
+shot scene-22.png
+turn PRESET 1
+wait 5000
+shot scene-23.png
+turn PRESET 1
+wait 5000
+shot scene-00.png
+turn PRESET 1
+wait 5000
+shot scene-01.png
+turn PRESET 1
+wait 5000
+shot scene-02.png
+turn PRESET 1
+wait 5000
+shot scene-03.png
+turn PRESET 1
+wait 5000
+shot scene-10.png
+turn PRESET 1
+wait 5000
+shot scene-11.png
+turn PRESET 1
+wait 5000
+shot scene-12.png
+turn PRESET 1
+wait 5000
+shot scene-13.png
+turn PRESET 1
+wait 5000
+shot scene-14.png
+turn PRESET 1
+wait 5000
+shot scene-15.png
+turn PRESET 1
+wait 5000
+shot scene-16.png
+turn PRESET 1
+wait 1500
+tap SEQ
+wait 100
+expect view 1
+wait 6000
+shot studio-2.png
+key 7 down
+wait 300
+key 7 up
+wait 200
+shot studio-2-note.png
+turn PRESET 4
+wait 1500
+wait 6000
+shot studio-0.png
+key 7 down
+wait 300
+key 7 up
+wait 200
+shot studio-0-note.png
+turn PRESET 4
+wait 1500
+wait 6000
+shot studio-1.png
+key 7 down
+wait 300
+key 7 up
+wait 200
+shot studio-1-note.png
+turn PRESET 7
+wait 1500
+tap SEL
+wait 200
+shot studio-mix.png
+tap GLO
+wait 200
+shot studio-setup.png
