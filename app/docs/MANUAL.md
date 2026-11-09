@@ -286,10 +286,18 @@ then add one outside note and listen to the music bend around it.
 
 ## Recording
 
-The FM-1 shows up on your computer as an audio input over USB. Record it in any audio app, or use the MOSS-1 tape
-deck page in Chrome: press Connect, then the big button or space to record. Takes can be named, played, downloaded
-as WAV and deleted. The same page reads your saved loops and downloads each one as a MIDI file, one MIDI track per
-loop track.
+The FM-1 shows up on your computer as an audio input over USB. Record it in any audio app, or use the tape deck
+(https://theowecker.github.io/fm1-moss/tape/) in Chrome or Edge:
+
+1. Plug in the FM-1 and press Connect.
+2. Press the big button, or space, to record. Press it again to stop.
+3. Each take can be named, played back and deleted. Takes stay in the browser until you delete them.
+4. **WAV** downloads the take at full quality, for a video editor.
+5. **Make video** turns the take into an MP4 with a scene picture (or your own) as the image, ready to upload to
+   YouTube. Pick the picture above the list.
+
+The same page reads your saved loops (Read loops) and downloads each one as a MIDI file, one MIDI track per loop
+track.
 
 ## Going back to stock firmware
 

@@ -53,6 +53,21 @@
     </div>
     <div class="status" id="status">Plug in the FM-1, then press Connect.</div>
   </div>
+  <div class="deck" style="margin-top:24px">
+    <div class="row">
+      <span>Video picture</span>
+      <select id="pic" aria-label="Picture for videos">
+        <option value="drift-garden.png">Garden</option>
+        <option value="drift-dusk.png">Dusk</option>
+        <option value="drift-halo.png">Halo</option>
+        <option value="lofi-study.png">Lofi study</option>
+        <option value="scapes-creek.png">Creek</option>
+        <option value="">Your own picture</option>
+      </select>
+      <input type="file" id="picfile" accept="image/*" hidden>
+    </div>
+    <p class="sub" style="margin:10px 0 0">Make video turns a take into an MP4 with this picture, ready for YouTube.</p>
+  </div>
   <ul id="takes"></ul>
   <h1 style="margin-top:40px">LOOPS</h1>
   <p class="sub">The eight loop slots, and the loop playing now, as MIDI files. Each loop track is its own MIDI track.</p>
@@ -202,7 +217,8 @@
     for (const t of takes) {
       const li = document.createElement('li'), url = URL.createObjectURL(t.blob);
       li.innerHTML = `<input class="name" aria-label="Take name"><span class="len">${clock(t.secs)}</span>
-        <button data-a="dl">Download</button><button data-a="del">Delete</button><audio controls preload="none"></audio>`;
+        <button data-a="dl">WAV</button><button data-a="mp4">Make video</button><button data-a="del">Delete</button>
+        <audio controls preload="none"></audio>`;
       li.querySelector('.name').value = t.name;
       li.querySelector('.name').onchange = e => { t.name = e.target.value; store.put(t); };
       li.querySelector('audio').src = url;
@@ -210,6 +226,7 @@
         const a = document.createElement('a');
         a.href = url; a.download = `${t.name}.wav`; a.click();
       };
+      li.querySelector('[data-a=mp4]').onclick = e => makeVideo(t, e.target);
       li.querySelector('[data-a=del]').onclick = async () => {
         if (confirm(`Delete "${t.name}"?`)) { await store.del(t.id); render(); }
       };
@@ -322,6 +339,106 @@
   }
 
   $('read').onclick = readLoops;
+
+  /* video: the take's audio as AAC and a still picture as H.264, in an MP4, all made here with WebCodecs */
+  const MUXER = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js';
+  const imgBase = location.pathname.includes('/tape') && !location.pathname.endsWith('tape.html') ? '../manual/img/' : 'manual/img/';
+  let ownPicture = null;
+
+  $('pic').onchange = () => { if (!$('pic').value) $('picfile').click(); };
+  $('picfile').onchange = e => {
+    const f = e.target.files[0];
+    if (f) ownPicture = URL.createObjectURL(f);
+  };
+
+  const loadScript = src => new Promise((res, rej) => {
+    if (window.Mp4Muxer) return res();
+    const el = document.createElement('script');
+    el.src = src; el.onload = res; el.onerror = () => rej(new Error('could not load the MP4 writer'));
+    document.head.appendChild(el);
+  });
+
+  const loadImage = src => new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im); im.onerror = () => rej(new Error('could not load the picture'));
+    im.src = src;
+  });
+
+  async function frameCanvas(title) {
+    const c = document.createElement('canvas'), g = c.getContext('2d');
+    c.width = 1280; c.height = 720;
+    g.fillStyle = '#10121c'; g.fillRect(0, 0, 1280, 720);
+    const im = await loadImage($('pic').value ? imgBase + $('pic').value : ownPicture || imgBase + 'drift-garden.png');
+    const side = Math.min(640, 640 * im.width / im.height);
+    g.imageSmoothingEnabled = !$('pic').value ? true : false;   /* pixel art stays sharp, a photo stays smooth */
+    g.drawImage(im, (1280 - side) / 2, 30, side, side * im.height / im.width);
+    g.fillStyle = '#9696a8'; g.font = '20px ui-monospace, Menlo, monospace'; g.textAlign = 'center';
+    g.fillText(title, 640, 700);
+    return c;
+  }
+
+  function parseWav(buf) {
+    const v = new DataView(buf);
+    let o = 12, rate = 44100, ch = 2, data = 44, len = buf.byteLength - 44;
+    while (o + 8 <= buf.byteLength) {             /* walk the chunks: fmt for the rate, data for the samples */
+      const id = String.fromCharCode(v.getUint8(o), v.getUint8(o + 1), v.getUint8(o + 2), v.getUint8(o + 3)), size = v.getUint32(o + 4, true);
+      if (id === 'fmt ') { ch = v.getUint16(o + 10, true); rate = v.getUint32(o + 12, true); }
+      if (id === 'data') { data = o + 8; len = Math.min(size, buf.byteLength - data); break; }
+      o += 8 + size;
+    }
+    return { pcm: new Int16Array(buf, data, Math.floor(len / 2)), rate, ch };
+  }
+
+  async function makeVideo(take, button) {
+    const label = button.textContent, say = t => { button.textContent = t; };
+    button.disabled = true;
+    try {
+      if (!window.VideoEncoder || !window.AudioEncoder) throw new Error('this browser cannot make video; use Chrome or Edge');
+      await loadScript(MUXER);
+      const { pcm, rate, ch } = parseWav(await take.blob.arrayBuffer()), frames = Math.floor(pcm.length / ch);
+      const audioCfg = { codec: 'mp4a.40.2', sampleRate: rate, numberOfChannels: 2, bitrate: 192000 };
+      const videoCfg = { codec: 'avc1.42001f', width: 1280, height: 720, bitrate: 400000, framerate: 1 };
+      if (!(await AudioEncoder.isConfigSupported(audioCfg)).supported) throw new Error('this browser cannot write AAC audio');
+      if (!(await VideoEncoder.isConfigSupported(videoCfg)).supported) throw new Error('this browser cannot write H.264 video');
+      const target = new Mp4Muxer.ArrayBufferTarget();
+      const muxer = new Mp4Muxer.Muxer({ target, fastStart: 'in-memory',
+        video: { codec: 'avc', width: 1280, height: 720 }, audio: { codec: 'aac', sampleRate: rate, numberOfChannels: 2 } });
+      let failed = null;
+      const venc = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: e => { failed = e; } });
+      const aenc = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: e => { failed = e; } });
+      venc.configure(videoCfg);
+      aenc.configure(audioCfg);
+      const canvas = await frameCanvas(`MOSS-1  ${take.name}`), secs = Math.ceil(frames / rate);
+      for (let s = 0; s < secs; s++) {              /* one still frame a second, a keyframe every ten */
+        const f = new VideoFrame(canvas, { timestamp: s * 1e6, duration: 1e6 });
+        venc.encode(f, { keyFrame: s % 10 === 0 });
+        f.close();
+        if (venc.encodeQueueSize > 30) await venc.flush();
+      }
+      const block = 4096;
+      for (let i = 0; i < frames; i += block) {
+        const n = Math.min(block, frames - i), planar = new Float32Array(n * 2);
+        for (let j = 0; j < n; j++) {
+          const l = pcm[(i + j) * ch] / 32768, r = ch > 1 ? pcm[(i + j) * ch + 1] / 32768 : l;
+          planar[j] = l; planar[n + j] = r;
+        }
+        aenc.encode(new AudioData({ format: 'f32-planar', sampleRate: rate, numberOfFrames: n, numberOfChannels: 2,
+          timestamp: Math.round(i / rate * 1e6), data: planar }));
+        if (aenc.encodeQueueSize > 50) { say(`${Math.round(100 * i / frames)}%`); await aenc.flush(); }
+        if (failed) throw failed;
+      }
+      await venc.flush(); await aenc.flush();
+      if (failed) throw failed;
+      muxer.finalize();
+      download(new Blob([target.buffer], { type: 'video/mp4' }), `${take.name}.mp4`);
+      say('Done');
+    } catch (e) {
+      alert('Could not make the video: ' + e.message);
+      say(label);
+    }
+    button.disabled = false;
+    setTimeout(() => say(label), 3000);
+  }
 
   store.open().then(async () => {
     render();

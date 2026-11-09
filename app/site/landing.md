@@ -11,6 +11,8 @@ This is version {{VERSION}}. You install it at your own risk, and the installer 
 - [Try it in the browser](emu/). It runs the same code as the FM-1, with sound.
 - [Install](install/) it from Chrome or Edge, with the FM-1 connected by USB.
 - The [Manual](manual/) explains every control.
+- The [Tape deck](tape/) records the FM-1 over USB, saves WAV or a video for YouTube, and turns saved loops into
+  MIDI files.
 - [Download {{PKG}}](firmware/{{PKG}}) to use the command-line installer: `python3 tools/fm1_install.py {{PKG}}`.
 - The [Source](https://github.com/theowecker/fm1-moss) is under MPL-2.0. It's built on fm1-base and felucca-bsp,
   which come from Felucca by Leo Kuroshita, Hügelton Instruments.
