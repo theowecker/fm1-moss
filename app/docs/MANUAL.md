@@ -126,9 +126,17 @@ with none.
 
 To play over a loop without adding to it, switch TAP to PLAY.
 
-**HOLD**: each key is a switch. Tap it and a soft held note comes on with the octave below. Tap it again and it
-goes. Lit keys show which notes are on. Held notes follow SNAP and steer the chord, but they use their own soft
-sound and are not looped.
+**HOLD**: build the music by adding and taking away notes. The lit keys are the notes the music plays from, which
+starts as the key's scale.
+
+- Tap a lit key to take that note away. The pads, bells, chords, melody, bass and your loop stop using it and play
+  the nearest note they still have. Take enough away and the music thins to a few notes, or to one drone.
+- Tap a dark key to add that note, even one outside the key. It swells in once, low and soft, so you hear it
+  arrive, and then the music uses it.
+- The last note always stays.
+- Changing KEY or MOOD starts again from that scale.
+
+In HOLD the keys don't play notes themselves, so there is nothing for REC to loop.
 
 ### LOOP (LFO)
 
@@ -258,7 +266,8 @@ MUTATE high.
 
 **Backwards garden**: DRIFT Halo, space REVERSE. SHAPE, SMEAR to 70. Play slowly.
 
-**A drone you build**: any scene, TAP on HOLD (press ENV twice). Tap three or four keys and let them ring.
+**A drone you build**: any scene, TAP on HOLD (press ENV twice). Take notes away until only two or three are lit,
+then add one outside note and listen to the music bend around it.
 
 ## Recording
 

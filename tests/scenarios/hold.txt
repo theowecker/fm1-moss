@@ -1,22 +1,41 @@
-# HOLD: a tap turns a note on and it stays; a second tap turns it off
+# HOLD: the keys show the notes the music plays from; a tap takes one away or adds it back; the last one stays
 wait 600
 tap ENV
 turn K4 1
 wait 50
 expect page 3
+expect held 7
 tapkey 7
-wait 50
-tapkey 11
-wait 3000
-expect held 2
+wait 100
+expect held 6
+tapkey 7
+wait 100
+expect held 7
+tapkey 8
+wait 100
+expect held 8
 wav hold.wav
 wait 4000
 wavstop
 expect peak_db_min -30
-tapkey 7
+# down to C and G: the music then plays only those
+tapkey 8
+tapkey 9
 tapkey 11
+tapkey 12
+tapkey 16
+tapkey 18
 wait 100
-expect held 0
-wait 4000
+expect held 2
+wait 15000
+expect outside 0
+# the last note stays
+tapkey 14
+wait 50
+expect held 1
+tapkey 7
+wait 50
+expect held 1
 turn K4 -2
 wait 50
+expect tap 0

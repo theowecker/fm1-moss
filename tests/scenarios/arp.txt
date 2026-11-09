@@ -9,10 +9,10 @@ wait 50
 expect tap 2
 tapkey 7
 wait 100
-expect held 1
+expect held 6
 tapkey 7
 wait 100
-expect held 0
+expect held 7
 tap ENV
 wait 50
 expect tap 0

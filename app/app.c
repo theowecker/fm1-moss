@@ -706,6 +706,10 @@ static void input(void)
         }
         if ((keys & bit) && !(ui.keys & bit)) {
             ui.key_note[k] = (uint8_t)note;
+            if (set.keys[3] == 2) {      /* HOLD: say what the tap does before the engine does it */
+                int in = ms_vis.pool >> (note % 12) & 1u, last = in && !(ms_vis.pool & ~(1u << (note % 12)));
+                app_say(MS_NOTE_NAME[note % 12], last ? "STAYS (LAST NOTE)" : in ? "TAKEN AWAY" : "ADDED");
+            }
             ms_note(note, 96);
             plat_midi_out(0x09u | 0x90u << 8 | (uint32_t)note << 16 | 96u << 24);
         } else if (!(keys & bit) && (ui.keys & bit)) {
@@ -751,7 +755,7 @@ static void input(void)
             break;
         case B_ENV:                      /* again on the KEYS page: PLAY, LISTEN, HOLD in turn */
             if (set.page == PG_KEYS) {
-                static const char *const HINT[3] = {"KEYS JUST PLAY", "MUSIC FOLLOWS YOU", "TAP KEYS ON AND OFF"};
+                static const char *const HINT[3] = {"KEYS JUST PLAY", "MUSIC FOLLOWS YOU", "ADD OR TAKE AWAY NOTES"};
                 set.keys[3] = (uint8_t)((set.keys[3] + 1u) % 3u);
                 ms_keys(3, set.keys[3]);
                 set_dirty = 1;
@@ -826,7 +830,7 @@ static void input(void)
             static const char *const HINT[4] = {"TAP REC TO LOOP", "TAP REC TO ADD", "TAP REC WHEN DONE", "TAP REC TO ADD"};
             ui.arp_t = 0;
             if (set.keys[3] == 2 && (ms_vis.lp_state == MS_LOOP_EMPTY || ms_vis.lp_state == MS_LOOP_PLAY)) {   /* HOLD's notes are switches, not loopable */
-                app_say("HOLD NOTES", "DON'T LOOP");
+                app_say("HOLD", "KEYS EDIT NOTES");
             } else if (ms_vis.lp_state == MS_LOOP_REC && !ms_vis.lp_n) {
                 app_say("NOTHING", "RECORDED");
                 ms_loop(0);
@@ -859,7 +863,7 @@ static void input(void)
             uint32_t note = (uint32_t)(53 + (int)k + 12 * set.octave);
             if (mask >> ((53u + k) % 12u) & 1u)
                 chord |= 1u << k;
-            if (note < 128u && ms_vis.hold[note >> 5] >> (note & 31u) & 1u)
+            if (set.keys[3] == 2 && (ms_vis.pool >> (note % 12u) & 1u))   /* HOLD: the notes the music plays */
                 held |= 1u << k;
         }
         if (btn & (1u << B_SAVE | 1u << B_SEQ)) {
@@ -869,7 +873,7 @@ static void input(void)
                     on |= 1u << SLOT_KEY[i];
             plat_lights(lit, on, 0, 0, 1);
         } else {
-            plat_lights(lit, keys | held, 0, chord, 1);
+            plat_lights(lit, keys | held, 0, set.keys[3] == 2 ? 0u : chord, 1);
         }
     }
 }
@@ -974,9 +978,16 @@ int app_expect(const char *what, int *got)
         *got = set.view;
     else if (!strcmp(what, "tap"))
         *got = set.keys[3];
-    else if (!strcmp(what, "held"))
-        *got = __builtin_popcount(ms_vis.hold[0]) + __builtin_popcount(ms_vis.hold[1]) + __builtin_popcount(ms_vis.hold[2])
-             + __builtin_popcount(ms_vis.hold[3]);
+    else if (!strcmp(what, "outside")) {   /* recent notes from the music (not the keys) that the HOLD set lacks */
+        int i, n = 0;
+        for (i = 0; i < 16; i++) {
+            uint16_t r = ms_vis.recent[i];
+            if ((r >> 8) != 4u && r && !(ms_vis.pool >> ((r & 0xFFu) % 12u) & 1u))
+                n++;
+        }
+        *got = n;
+    } else if (!strcmp(what, "held"))
+        *got = __builtin_popcount(ms_vis.pool);
     else if (!strncmp(what, "slot", 4))   /* slotN: how many notes slot N holds */
         *got = slots.s[atoi(what + 4) % NSLOTS].n;
     else if (!strcmp(what, "tracks"))

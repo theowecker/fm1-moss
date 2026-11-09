@@ -243,12 +243,12 @@ enum { SNAP_FREE, SNAP_SCALE, SNAP_CHORD };
 enum { KV_AUTO, KV_EP, KV_BELL, KV_PAD, KV_KALIMBA };
 static struct {
     int snap, voice, listen, hold;
+    uint16_t pool;                     /* HOLD: the pitch classes the music may play, bit 0 = C */
     float harmony;
     float energy;                      /* 0..1, raised by playing the keys, makes the generators busier */
     int8_t held[128][3];               /* per held key: sounding note and up to two harmony notes, -1 none */
 } kb;
 
-static void holds_clear(void);
 
 enum { SP_HALL, SP_PLATE, SP_CLOUD, SP_SHIMMER, SP_TAPE, SP_REVERSE, SP_N };
 const char *const MS_SPACE_NAME[SP_N] = {"HALL", "PLATE", "CLOUD", "SHIMMER", "TAPE", "REVERSE"};
@@ -379,9 +379,27 @@ static voice_t *voice_alloc(void)
 }
 
 /* attack and release in seconds; gate in samples (-1 held) */
+/* in HOLD, a note the set lacks moves to the nearest note it has; a tie goes down */
+static int pool_fit(int note)
+{
+    int d;
+    if (!kb.hold || !kb.pool)
+        return note;
+    for (d = 0; d < 12; d++) {
+        if (kb.pool >> ((note - d + 120) % 12) & 1u)
+            return note - d;
+        if (kb.pool >> ((note + d) % 12) & 1u)
+            return note + d;
+    }
+    return note;
+}
+
 static voice_t *voice_start(int kind, int note, float vel, int layer, int32_t gate, float atk, float rel, float pan)
 {
-    voice_t *v = voice_alloc();
+    voice_t *v;
+    if (layer != SRC_KEYS)
+        note = pool_fit(note);
+    v = voice_alloc();
     float f = mtof((float)note), bright;
     v->kind = (uint8_t)kind;
     v->note = (int8_t)note;
@@ -518,6 +536,7 @@ static struct {
 
 static void bass_note(int note, float vel, int32_t gate, float glide_secs, float atk)
 {
+    note = pool_fit(note);
     bass.target = mtof((float)note) / MS_SR;
     if (bass.env < 0.01f || glide_secs <= 0.0f)
         bass.inc = bass.target;
@@ -2045,64 +2064,25 @@ static int loop_listening(void)
     return lp.state == LP_REC || lp.state == LP_DUB || (kb.listen && lp.state == LP_PLAY);
 }
 
-static void holds_clear(void)
-{
-    int i, j;
-    for (i = 0; i < 128; i++)
-        if (ms_vis.hold[i >> 5] >> (i & 31) & 1u)
-            for (j = 0; j < 3; j++)
-                if (kb.held[i][j] >= 0) {
-                    voice_release_note(kb.held[i][j], SRC_KEYS);
-                    kb.held[i][j] = -1;
-                }
-    for (i = 0; i < 4; i++)
-        ms_vis.hold[i] = 0;
-}
-
-/* HOLD: a tap turns a soft tone and its octave below on, until the next tap on the same key */
-static int pitch_held_elsewhere(int pitch, int except)
-{
-    int i, j;
-    for (i = 0; i < 128; i++)
-        if (i != except && (ms_vis.hold[i >> 5] >> (i & 31) & 1u))
-            for (j = 0; j < 3; j++)
-                if (kb.held[i][j] == pitch)
-                    return 1;
-    return 0;
-}
-
-/* release what a key sounds, sparing pitches another held key shares (voices are released by pitch) */
-static void key_release(int note)
-{
-    int8_t *h = kb.held[note];
-    int i;
-    for (i = 0; i < 3; i++)
-        if (h[i] >= 0) {
-            if (!pitch_held_elsewhere(h[i], note))
-                voice_release_note(h[i], SRC_KEYS);
-            h[i] = -1;
-        }
-}
-
+/* HOLD: the keys add notes to the set the music plays from, or take them out (the last one stays). A note added
+ * swells in once, low and soft, so it is heard arriving */
 static void hold_toggle(int note, float vel)
 {
-    int8_t *h = kb.held[note];
-    uint32_t bit = 1u << (note & 31);
-    int n;
-    if (ms_vis.hold[note >> 5] & bit) {
-        ms_vis.hold[note >> 5] &= ~bit;
-        key_release(note);
-        return;
+    uint16_t bit = (uint16_t)(1u << (note % 12));
+    if (kb.pool & bit) {
+        if (kb.pool & ~bit)
+            kb.pool &= (uint16_t)~bit;
+    } else {
+        int n = note;
+        while (n > 59)
+            n -= 12;
+        while (n < 48)
+            n += 12;
+        kb.pool |= bit;
+        voice_start(V_PAD, n, 0.35f + 0.25f * vel, SRC_KEYS, (int32_t)(2.5f * MS_SR), 1.0f, 3.5f, frand2() * 0.4f);
+        plant(note);
     }
-    key_release(note);
-    n = clamp(snap_note(note), 36, 96);
-    voice_start(V_PAD, n, 0.45f + 0.3f * vel, SRC_KEYS, -1, 1.2f, 3.0f, frand2() * 0.5f);
-    voice_start(V_PAD, n - 12, 0.3f + 0.2f * vel, SRC_KEYS, -1, 2.0f, 3.0f, frand2() * 0.5f);
-    h[0] = (int8_t)n;
-    h[1] = (int8_t)(n - 12);
-    h[2] = -1;
-    ms_vis.hold[note >> 5] |= bit;
-    plant(n);
+    ms_vis.pool = kb.pool;
 }
 
 void ms_note_now(int note, int vel)
@@ -2110,7 +2090,7 @@ void ms_note_now(int note, int vel)
     int8_t *h;
     int i, was;
     note = clamp(note, 0, 127);
-    if (kb.hold && (vel || (ms_vis.hold[note >> 5] >> (note & 31) & 1u))) {
+    if (kb.hold && (vel || kb.held[note][0] < 0)) {   /* a key held from before HOLD still gets its note-off */
         if (vel)
             hold_toggle(note, (float)vel / 127.0f);
         return;
@@ -2194,10 +2174,12 @@ static void drain(void)
         case C_ROOT:
             st.root = ((c.a % 12) + 12) % 12;
             chord_set(hm.degree);
+            ms_vis.pool = kb.pool = ms_scale_mask(st.mood, st.root);
             break;
         case C_MOOD:
             st.mood = clamp(c.a, 0, MS_NMOODS - 1);
             chord_set(hm.degree);
+            ms_vis.pool = kb.pool = ms_scale_mask(st.mood, st.root);
             break;
         case C_PLAY:
             st.playing = c.a;
@@ -2222,7 +2204,6 @@ static void drain(void)
             ms_note_now(c.a, c.b);
             break;
         case C_PANIC:
-            holds_clear();
             lp.state = LP_EMPTY;
             lp.n = 0;
             for (int i = 0; i < NV; i++)
@@ -2243,10 +2224,10 @@ static void drain(void)
                 kb.voice = clamp(c.b, 0, 4);
             else {
                 kb.listen = c.b == 1;
-                if (kb.hold && c.b != 2)
-                    holds_clear();
-                if (!kb.hold && c.b == 2)
+                if (!kb.hold && c.b == 2) {
                     loop_close(-1);     /* a key held into HOLD would leave its loop note open */
+                    ms_vis.pool = kb.pool = ms_scale_mask(st.mood, st.root);
+                }
                 kb.hold = c.b == 2;
             }
             break;
