@@ -83,6 +83,7 @@ static void settings_defaults(void)
     memset(&set, 0, sizeof set);
     set.magic = SET_MAGIC;
     set.mode = MODE_DRIFT;
+    set.scene[MODE_DRIFT] = 4;           /* GARDEN: the liveliest first impression */
     for (m = 0; m < MS_NMODES; m++) {
         set.beat[m][2] = 70;
         scene_recipe(m);

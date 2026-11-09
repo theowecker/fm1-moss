@@ -2827,7 +2827,7 @@ void ms_init(void)
     na.surf_period = 9.0f;
     na.gust_target = 0.5f;
     st.mode = MODE_DRIFT;
-    st.scene = 0;
+    st.scene = 4;
     st.root = 0;
     st.playing = 1;
     st.sleep_target = ms.sleep = 1.0f;

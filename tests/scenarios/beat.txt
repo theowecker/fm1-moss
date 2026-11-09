@@ -4,6 +4,9 @@ tap SEL
 tap SEL
 wait 100
 expect page 2
+expect kit 1
+turn K1 -6
+wait 50
 expect kit 0
 turn K1 1
 wait 50

@@ -2,10 +2,10 @@
 wait 600
 turn K1 5
 wait 50
-expect macro0 55
+expect macro0 70
 press SAVE
 wait 2200
 tapkey 0
 release SAVE
 wait 50
-expect macro0 55
+expect macro0 70

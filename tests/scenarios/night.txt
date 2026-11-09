@@ -1,6 +1,6 @@
 # the storm: thunder comes; the night: an owl and crickets
 wait 600
-turn PRESET -7
+turn PRESET -11
 wait 1200
 turn PRESET 4
 wait 1500

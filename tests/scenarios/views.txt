@@ -1,18 +1,6 @@
-# every scene in the PICTURE view (PRESETS walks them all, from DRIFT's first), then the STUDIO view
+# every scene in the PICTURE view (PRESETS walks them all, from where it starts), then the STUDIO view
 wait 600
 expect view 0
-wait 5000
-shot scene-20.png
-turn PRESET 1
-wait 5000
-shot scene-21.png
-turn PRESET 1
-wait 5000
-shot scene-22.png
-turn PRESET 1
-wait 5000
-shot scene-23.png
-turn PRESET 1
 wait 5000
 shot scene-24.png
 turn PRESET 1
@@ -49,6 +37,18 @@ turn PRESET 1
 wait 5000
 shot scene-16.png
 turn PRESET 1
+wait 5000
+shot scene-20.png
+turn PRESET 1
+wait 5000
+shot scene-21.png
+turn PRESET 1
+wait 5000
+shot scene-22.png
+turn PRESET 1
+wait 5000
+shot scene-23.png
+turn PRESET 1
 wait 1500
 tap SEQ
 wait 100
@@ -60,7 +60,7 @@ wait 300
 key 7 up
 wait 200
 shot studio-2-note.png
-turn PRESET 5
+turn PRESET 1
 wait 1500
 wait 6000
 shot studio-0.png

@@ -51,7 +51,7 @@ keys show the notes of the chord that is playing.
 Garden. Garden is the bright one: quicker kalimba loops, birdsong and a soft beat.
 
 PRESETS goes through them all in one list: LOFI, then SCAPES, then DRIFT, then back to the start. MOSS-1 starts
-on DRIFT Halo.
+on DRIFT Garden.
 
 Each scene sets its own HOME and MIX knobs, tempo, mood and beat. Changing scene loads them. The KEY, the space
 and the KEYS, LOOP, SHAPE and FX pages stay as you set them, whatever the scene.
