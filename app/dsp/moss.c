@@ -20,30 +20,31 @@ const char *const MS_MIX_NAME[MS_NMODES][MS_NMIX] = {
     {"NATURE", "LIFE", "PAD", "NOTES"},
     {"PAD", "BELLS", "BASS", "AIR"},
 };
-const uint8_t MS_NSCENES[MS_NMODES] = {4, 7, 4};
+const uint8_t MS_NSCENES[MS_NMODES] = {4, 7, 5};
 
 /*                                     macro                 mix             bpm  mood */
 static const ms_scene_t SCENES[MS_NMODES][MS_MAX_SCENES] = {
     {
-        {"STUDY", {55, 45, 35, 40}, {70, 65, 70, 0}, 82, MOOD_MAJOR},
-        {"RAINY", {45, 40, 30, 50}, {70, 55, 65, 42}, 72, MOOD_MINOR},
-        {"NIGHT", {38, 35, 45, 60}, {72, 50, 70, 0}, 66, MOOD_DORIAN},
-        {"TAPE", {50, 70, 70, 45}, {70, 65, 70, 0}, 86, MOOD_MAJOR},
+        {"STUDY", {55, 45, 35, 40}, {70, 65, 70, 0}, 82, MOOD_MAJOR, 2, 0, 70},
+        {"RAINY", {45, 40, 30, 50}, {70, 55, 65, 42}, 72, MOOD_MINOR, 2, 0, 70},
+        {"NIGHT", {38, 35, 45, 60}, {72, 50, 70, 0}, 66, MOOD_DORIAN, 2, 0, 70},
+        {"TAPE", {50, 70, 70, 45}, {70, 65, 70, 0}, 86, MOOD_MAJOR, 2, 0, 70},
     },
     {
-        {"FOREST", {50, 60, 60, 55}, {50, 50, 50, 55}, 70, MOOD_LYDIAN},
-        {"RAIN", {55, 30, 50, 55}, {52, 40, 52, 50}, 70, MOOD_MINOR},
-        {"SHORE", {50, 45, 55, 60}, {55, 42, 50, 50}, 70, MOOD_MIXO},
-        {"NIGHT", {40, 60, 45, 65}, {45, 48, 52, 45}, 70, MOOD_DORIAN},
-        {"STORM", {65, 0, 40, 50}, {60, 0, 50, 35}, 70, MOOD_MINOR},
-        {"HEARTH", {50, 20, 45, 45}, {52, 30, 50, 55}, 70, MOOD_MAJOR},
-        {"CREEK", {50, 55, 60, 55}, {48, 48, 48, 55}, 70, MOOD_LYDIAN},
+        {"FOREST", {50, 60, 60, 55}, {50, 50, 50, 55}, 70, MOOD_LYDIAN, 0, 0, 0},
+        {"RAIN", {55, 30, 50, 55}, {52, 40, 52, 50}, 70, MOOD_MINOR, 0, 0, 0},
+        {"SHORE", {50, 45, 55, 60}, {55, 42, 50, 50}, 70, MOOD_MIXO, 0, 0, 0},
+        {"NIGHT", {40, 60, 45, 65}, {45, 48, 52, 45}, 70, MOOD_DORIAN, 0, 0, 0},
+        {"STORM", {65, 0, 40, 50}, {60, 0, 50, 35}, 70, MOOD_MINOR, 0, 0, 0},
+        {"HEARTH", {50, 20, 45, 45}, {52, 30, 50, 55}, 70, MOOD_MAJOR, 0, 0, 0},
+        {"CREEK", {50, 55, 60, 55}, {48, 48, 48, 55}, 70, MOOD_LYDIAN, 0, 0, 0},
     },
     {
-        {"HALO", {45, 55, 40, 70}, {65, 65, 55, 30}, 72, MOOD_MAJOR},
-        {"TIDE", {35, 40, 35, 75}, {70, 55, 65, 40}, 60, MOOD_DORIAN},
-        {"GLASS", {60, 65, 55, 65}, {55, 70, 45, 25}, 84, MOOD_LYDIAN},
-        {"DUSK", {30, 30, 25, 80}, {75, 50, 60, 35}, 52, MOOD_MINOR},
+        {"HALO", {45, 55, 40, 70}, {65, 65, 55, 30}, 72, MOOD_MAJOR, 0, 0, 0},
+        {"TIDE", {35, 40, 35, 75}, {70, 55, 65, 40}, 60, MOOD_DORIAN, 0, 0, 0},
+        {"GLASS", {60, 65, 55, 65}, {55, 70, 45, 25}, 84, MOOD_LYDIAN, 0, 0, 0},
+        {"DUSK", {30, 30, 25, 80}, {75, 50, 60, 35}, 52, MOOD_MINOR, 0, 0, 0},
+        {"GARDEN", {60, 65, 60, 55}, {55, 70, 45, 50}, 96, MOOD_MAJOR, 1, 4, 45},
     },
 };
 
@@ -115,14 +116,18 @@ static const scape_style_t SCAPE_STYLE[] = {
 typedef struct {
     uint8_t bell_kind;
     float pad_bright;
-    uint8_t loop_len[4];
+    uint8_t loop_len[4];               /* in steps */
+    uint8_t step;                      /* sixteenths per step: 4 a quarter, 2 an eighth */
+    uint8_t bird;
+    float chord_time;                  /* how long a chord lasts, against DRIFT's own */
 } drift_style_t;
 
 static const drift_style_t DRIFT_STYLE[] = {
-    {V_BELL, 0.45f, {11, 14, 19, 23}},
-    {V_SOFTBELL, 0.35f, {13, 17, 21, 29}},
-    {V_KALIMBA, 0.55f, {7, 10, 13, 17}},
-    {V_EP, 0.25f, {15, 19, 26, 31}},
+    {V_BELL, 0.45f, {11, 14, 19, 23}, 4, BIRD_NONE, 1.0f},
+    {V_SOFTBELL, 0.35f, {13, 17, 21, 29}, 4, BIRD_NONE, 1.0f},
+    {V_KALIMBA, 0.55f, {7, 10, 13, 17}, 4, BIRD_NONE, 1.0f},
+    {V_EP, 0.25f, {15, 19, 26, 31}, 4, BIRD_NONE, 1.0f},
+    {V_KALIMBA, 0.65f, {6, 7, 9, 11}, 2, BIRD_SONG, 0.35f},
 };
 
 #define SN 1024
@@ -574,10 +579,10 @@ static const kit_t KITS[KIT_N] = {
      480, 2.76f, 0.6f, 0.9f, 0.05f, 0.45f},
     {42, 30, 0.08f, 0.9f, 0.5f, 0, 0, 0, 0.01f, 0.07f, 0.5f, 900, 0.7f, 0.02f, 0.05f, 0.02f, 0.2f,
      880, 1.0f, 0.0f, 0.4f, 0.03f, 0.3f},
-    {60, 200, 0.01f, 0.12f, 0.35f, 0.2f, 1800, 0.08f, 0.015f, 0.05f, 0.03f, 5000, 2.0f, 0.06f, 0.02f, 0.05f, 0.08f,
-     2400, 1.5f, 0.3f, 0.05f, 0.06f, 0.9f},
-    {65, 60, 0.03f, 0.25f, 0.4f, 0.05f, 0, 0, 0.01f, 0.12f, 0.12f, 1200, 2.5f, 0.05f, 0.06f, 0.05f, 0.2f,
-     900, 1.5f, 0.3f, 0.08f, 0.1f, 0.7f},
+    {60, 200, 0.01f, 0.12f, 0.25f, 0.12f, 1800, 0.06f, 0.015f, 0.035f, 0.03f, 5000, 2.0f, 0.045f, 0.02f, 0.035f, 0.08f,
+     2400, 1.5f, 0.3f, 0.05f, 0.045f, 0.9f},
+    {65, 60, 0.03f, 0.25f, 0.3f, 0.04f, 0, 0, 0.01f, 0.09f, 0.12f, 1200, 2.5f, 0.04f, 0.06f, 0.04f, 0.2f,
+     900, 1.5f, 0.3f, 0.08f, 0.07f, 0.7f},
 };
 
 typedef struct {
@@ -1378,7 +1383,7 @@ static void drift_next_chord(void)
     hm.pending = -1;
     if (bt.bass == BASS_AUTO)
         bass_note(36 + ((st.root + hm.tones[0]) % 12), 0.8f, -1, 1.6f, 2.5f);
-    seq.chord_t = (150.0f - 135.0f * k.drift) * (0.7f + 0.6f * frand());
+    seq.chord_t = (150.0f - 135.0f * k.drift) * (0.7f + 0.6f * frand()) * DRIFT_STYLE[st.scene].chord_time;
 }
 
 static void drift_step(void)   /* every quarter note */
@@ -1507,6 +1512,7 @@ static void apply(void)
         k.drift = u(st.macro[2]);
         k.wind = 0.3f;
         k.pad_bright = DRIFT_STYLE[st.scene].pad_bright * (0.5f + u(st.macro[1]));
+        k.bird_rate = DRIFT_STYLE[st.scene].bird ? 4.0f : 0.0f;
         break;
     }
     svf_set(&ms.tone_l, k.tone_fc, 0.6f);
@@ -1557,8 +1563,11 @@ static void mode_start(void)
     }
     if (st.mode != MODE_SCAPES) {
         crickets_init(0);
-        for (i = 0; i < NBIRD; i++)
-            bd[i].species = BIRD_NONE, bd[i].syl_left = 0;
+        for (i = 0; i < NBIRD; i++) {
+            bd[i].species = st.mode == MODE_DRIFT ? DRIFT_STYLE[st.scene].bird : BIRD_NONE;
+            bd[i].syl_left = 0;
+            bd[i].wait = (int32_t)((2.0f + 6.0f * frand()) * MS_SR);
+        }
     }
     th.active = 0;
 }
@@ -2489,7 +2498,7 @@ static void control(void)
                 backing_bass_step();
             if (st.mode == MODE_LOFI)
                 lofi_step();
-            else if (st.mode == MODE_DRIFT && (seq.step & 3u) == 0)
+            else if (st.mode == MODE_DRIFT && seq.step % DRIFT_STYLE[st.scene].step == 0u)
                 drift_step();
             seq.acc += step_len();
             seq.step++;
@@ -2517,7 +2526,8 @@ static void control(void)
     nature_control();
     if (st.mode == MODE_DRIFT)
         for (int i = 0; i < NLOOP; i++)
-            ms_vis.loop_pos[i] = ((float)dg.pos[i] + (float)(seq.step & 3u) * 0.25f) / (float)dg.len[i];
+            ms_vis.loop_pos[i] = ((float)dg.pos[i] + (float)(seq.step % DRIFT_STYLE[st.scene].step) / (float)DRIFT_STYLE[st.scene].step)
+                               / (float)dg.len[i];
     ms_vis.playing = (uint8_t)st.playing;
     ms_vis.frozen = (uint8_t)st.frozen;
 }
@@ -2542,7 +2552,7 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
     float crush_bits = dust > 0.4f ? fm_exp2f(15.0f - 6.0f * (dust - 0.4f) / 0.6f) : 0.0f;
     float rain_gain = st.mode == MODE_LOFI ? st.layer[3] : st.layer[0];
     float wind_gain = st.mode == MODE_DRIFT ? st.layer[3] * 0.6f : st.layer[0];
-    float bed_gain = st.layer[0], life_gain = st.layer[1];
+    float bed_gain = st.layer[0], life_gain = st.mode == MODE_DRIFT ? st.layer[3] * 0.7f : st.layer[1];
     float bass_gain = bt.bass == BASS_OFF ? 0.0f
                     : bt.bass >= BASS_ROOT ? bt.level * (st.mode == MODE_LOFI ? st.layer[2] : 0.8f)
                     : st.mode == MODE_DRIFT ? st.layer[2] * 0.7f : st.layer[2];
@@ -2676,7 +2686,7 @@ static void render_block(float *out_l, float *out_r, uint32_t n)
             rs_l += 0.3f * x;
             rs_r += 0.3f * y;
         }
-        if (st.mode == MODE_SCAPES) {
+        if (st.mode == MODE_SCAPES || bd[0].species != BIRD_NONE) {   /* DRIFT's garden has birds too, on AIR */
             x = y = 0.0f;
             for (j = 0; j < NBIRD; j++)
                 bird_tick(&bd[j], &x, &y);

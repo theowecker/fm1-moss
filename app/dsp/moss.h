@@ -21,6 +21,7 @@ typedef struct {
     uint8_t mix[MS_NMIX];
     uint8_t tempo;                     /* bpm */
     uint8_t mood;
+    uint8_t kit, pattern, beat_level;  /* the beat the scene starts with; level 0 keeps the BEAT page's */
 } ms_scene_t;
 
 extern const char *const MS_MODE_NAME[MS_NMODES];

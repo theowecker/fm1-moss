@@ -54,6 +54,8 @@ static const look_t LOOKS[MS_NMODES][MS_MAX_SCENES] = {
          CI(40, 60, 60), CI(255, 255, 255), L_MOUNT, W_LAKE, O_NONE, 0, 0, F_CLOUDS},
         {CI(18, 22, 58), CI(52, 46, 98), CI(210, 120, 120), CI(34, 30, 56), CI(16, 18, 30), CI(20, 26, 52), CI(8, 10, 16),
          CI(210, 255, 90), L_HILLS, W_LAKE, O_NONE, 0, 0, F_STARS | F_FIREFLIES | F_REEDS},
+        {CI(105, 165, 230), CI(185, 215, 240), CI(255, 236, 200), CI(150, 175, 175), CI(85, 135, 90), CI(120, 170, 210),
+         CI(80, 135, 75), CI(255, 140, 170), L_GARDEN, W_NONE, O_SUN, 188, 38, F_BUTTERFLIES},
     },
 };
 
@@ -431,10 +433,10 @@ static void draw_weather(uint32_t now)
     if (ui.chirp_at && now - ui.chirp_at < 160u)
         put((int32_t)(ms_vis.chirps * 71u % 230u) + 5, 225 + (int32_t)(ms_vis.chirps % 12u), lk->light.r ? c565(lk->light) : RGB(200, 255, 120));
     if (lk->flags & F_BUTTERFLIES)
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < 4; i++) {
             float t = (float)now * 0.001f + (float)i * 9.0f;
-            int32_t x = 60 + i * 110 + (int32_t)(30.0f * fm_sinf(t * 0.4f)), y = 172 + (int32_t)(14.0f * fm_sinf(t * 0.7f));
-            uint16_t wc = i ? RGB(255, 230, 120) : RGB(255, 255, 255);
+            int32_t x = 30 + i * 60 + (int32_t)(30.0f * fm_sinf(t * 0.4f)), y = 166 + (i & 1) * 14 + (int32_t)(14.0f * fm_sinf(t * 0.7f));
+            uint16_t wc = (i & 1) ? RGB(255, 230, 120) : (i & 2) ? RGB(255, 170, 200) : RGB(255, 255, 255);
             put(x - 1, y, wc), put(x + 1, y, wc);
             if ((now / 140u + (uint32_t)i) & 1u)
                 put(x - 1, y - 1, wc), put(x + 1, y - 1, wc);

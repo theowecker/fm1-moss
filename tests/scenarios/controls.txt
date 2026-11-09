@@ -1,6 +1,6 @@
 # the knobs, play and freeze, the keys, MIDI in, saving across a restart, the scene's recipe
 wait 600
-turn PRESET 4
+turn PRESET 5
 wait 1200
 expect mode 0
 turn K2 5

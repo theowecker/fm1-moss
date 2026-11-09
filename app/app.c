@@ -71,6 +71,10 @@ static void scene_recipe(int m)
         set.mix[m][i] = sc->mix[i];
     set.tempo[m] = sc->tempo;
     set.mood[m] = sc->mood;
+    set.beat[m][0] = sc->kit;
+    set.beat[m][1] = sc->pattern;
+    if (sc->beat_level)
+        set.beat[m][2] = sc->beat_level;
 }
 
 static void settings_defaults(void)
@@ -79,13 +83,11 @@ static void settings_defaults(void)
     memset(&set, 0, sizeof set);
     set.magic = SET_MAGIC;
     set.mode = MODE_DRIFT;
-    for (m = 0; m < MS_NMODES; m++)
-        scene_recipe(m);
-    set.keys[0] = 1, set.keys[1] = 30, set.keys[2] = 0, set.keys[3] = 1;
     for (m = 0; m < MS_NMODES; m++) {
-        set.beat[m][0] = m == MODE_LOFI ? 2 : 0;   /* LOFI keeps its own kit; the others start without drums */
         set.beat[m][2] = 70;
+        scene_recipe(m);
     }
+    set.keys[0] = 1, set.keys[1] = 30, set.keys[2] = 0, set.keys[3] = 1;
     set.loop[0] = 30, set.loop[1] = 25, set.loop[2] = 30, set.loop[3] = 1;
     set.fx[0] = 30, set.fx[1] = 2, set.fx[2] = 45, set.fx[3] = 20;
 }

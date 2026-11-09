@@ -30,7 +30,10 @@ static void select_scene(int m, int s)
         ms_mix(i, sc->mix[i]);
     ms_tempo(sc->tempo);
     ms_mood(sc->mood);
-    ms_beat(0, m == MODE_LOFI ? 2 : 0);
+    ms_beat(0, sc->kit);
+    ms_beat(1, sc->pattern);
+    if (sc->beat_level)
+        ms_beat(2, sc->beat_level);
 }
 
 int main(int argc, char **argv)

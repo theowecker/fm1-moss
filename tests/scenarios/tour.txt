@@ -6,7 +6,7 @@ expect playing 1
 wait 8000
 shot drift.png
 expect notes >3
-turn PRESET 4
+turn PRESET 5
 wait 1500
 expect mode 0
 wait 6000

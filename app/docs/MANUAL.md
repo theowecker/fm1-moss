@@ -7,7 +7,7 @@ picks up what you play.
 
 ## The short version
 
-- **PRESETS** picks the scene. There are 15, across three modes.
+- **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
 - **SELECT** steps through the pages. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
@@ -47,16 +47,17 @@ keys show the notes of the chord that is playing.
 
 **SCAPES**: nature with a quiet pad and a few notes. Forest, Rain, Shore, Night, Storm, Hearth, Creek.
 
-**DRIFT**: slow pads and bells on loops of different lengths, so it never quite repeats. Halo, Tide, Glass, Dusk.
+**DRIFT**: slow pads and bells on loops of different lengths, so it never quite repeats. Halo, Tide, Glass, Dusk,
+Garden. Garden is the bright one: quicker kalimba loops, birdsong and a soft beat.
 
 PRESETS goes through them all in one list: LOFI, then SCAPES, then DRIFT, then back to the start. MOSS-1 starts
 on DRIFT Halo.
 
-Each scene sets its own HOME and MIX knobs, tempo and mood. Changing scene loads them. The BEAT page is kept for
-each mode. The KEY, the space and the KEYS, LOOP, SHAPE and FX pages stay as you set them, whatever the scene.
+Each scene sets its own HOME and MIX knobs, tempo, mood and beat. Changing scene loads them. The KEY, the space
+and the KEYS, LOOP, SHAPE and FX pages stay as you set them, whatever the scene.
 
 To get a scene back to how it started, hold SAVE until the screen says LET GO TO RESET SCENE, then let go. That
-resets its HOME and MIX knobs, tempo and mood.
+resets its HOME and MIX knobs, tempo, mood and beat.
 
 ![](img/lofi-study.png)
 
@@ -91,7 +92,8 @@ The level of each part.
 
 ### BEAT (SEL twice)
 
-Drums and a backing bass, in any mode. LOFI starts with its own kit. The other modes start with none.
+Drums and a backing bass, in any mode. The LOFI scenes and DRIFT's Garden start with a kit. The others start
+with none.
 
 | Knob | What it does |
 | --- | --- |
