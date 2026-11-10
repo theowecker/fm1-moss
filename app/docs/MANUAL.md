@@ -9,8 +9,8 @@ picks up what you play.
 
 - **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
-- **SELECT** steps through the pages in order: the sound (HOME, MIX, FX, MOTION), the beat, the keys, the loops
-  (LOOP, SHAPE, TAPE, LIBRARY) and SETUP. **K1 to K4** change the page you are on.
+- **SELECT** steps through the pages in order: the sound (HOME, MIX, FX, MOTION), the beat, the keys and SETUP.
+  The loop pages have their own screen: press LFO. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
 - **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
 - **SEQ** steps through the three screens: the picture, the studio and the loops.

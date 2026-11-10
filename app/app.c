@@ -963,8 +963,13 @@ static void input(void)
         if (set.view == VIEW_LOOPS) {
             int n = PG_LIBRARY - PG_LOOP + 1;
             page_set(PG_LOOP + ((set.page - PG_LOOP + e) % n + n) % n);
-        } else {
-            page_set((set.page + e % NPAGES + NPAGES) % NPAGES);
+        } else {                         /* the loop pages are the LOOPS screen's own, so SELECT goes round them */
+            int p = set.page, n = e > 0 ? e : -e, dir = e > 0 ? 1 : -1;
+            while (n--)
+                do
+                    p = (p + dir + NPAGES) % NPAGES;
+                while (loop_page(p));
+            page_set(p);
         }
     }
     for (k = 0; k < 4u; k++)
