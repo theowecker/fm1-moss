@@ -261,7 +261,7 @@ static void loops_status(uint32_t now, const char **state, const char **hint, ui
 {
     static char st[24];
     int tap = set.keys[3], lp = (int)ms_vis.lp_state, free_layer = -1, i;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < MS_NLAYERS; i++)
         if (!(ms_vis.lp_tracks >> i & 1u)) {
             free_layer = i;
             break;
@@ -297,7 +297,8 @@ static void loops_status(uint32_t now, const char **state, const char **hint, ui
     }
     switch (now / 3000u % 3u) {           /* the tips take turns */
     case 0:
-        *hint = free_layer < 0 ? "LAYERS FULL. CLEAR ONE ON LAYERS"
+        *hint = ms_vis.lp_redo >= 0 ? "PLAY TO REDO THE RED LAYER"
+              : free_layer < 0 ? "LAYERS FULL. CLEAR ONE ON LAYERS"
               : tap == 1 ? "PLAY TO ADD A LAYER" : "TAP REC TO KEEP OR LET FADE";
         break;
     case 1:
@@ -309,36 +310,47 @@ static void loops_status(uint32_t now, const char **state, const char **hint, ui
     }
 }
 
+/* a lane per layer, thin so eight fit: the chosen one (LAYERS' K1) is marked, one armed for REDO pulses red */
 static void loops_lane(int32_t t, int32_t y, uint32_t now, rgb_t acc)
 {
     static const rgb_t WORN = CI(150, 120, 90);
-    int32_t x0 = 22, w = 180, b, x;
+    int32_t x0 = 22, w = 160, b, x;
     int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
     int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC) && ms_vis.lp_track == t;
-    int32_t amp = set.tape[0] * 3 / 100;  /* WARBLE bends the lane, AGE browns the notes */
+    int redo = ms_vis.lp_redo == t, sel = set.page == PG_LOOP && ui.sel_track == t;
+    int32_t amp = set.tape[0] * 2 / 100;  /* WARBLE bends the lane, AGE browns the notes */
     rgb_t dot = mix(acc, WORN, (int32_t)set.tape[2] * 200 / 100);
-    uint16_t c = rec ? RGB(240, 96, 96) : !used ? ST_DIM : muted ? c565(mix(C(16, 18, 28), dot, 80)) : c565(dot);
-    char n[8];
-    n[0] = (char)('1' + t);
-    n[1] = 0;
-    cv_text(8, y - 6, &FONT_T, n, c);
+    uint16_t red = RGB(240, 96, 96);
+    uint16_t c = rec || (redo && (now / 300u & 1u)) ? red : !used ? ST_DIM : muted ? c565(mix(C(16, 18, 28), dot, 80)) : c565(dot);
+    if (sel)
+        fill(x0 - 4, y - 2, w + 8, 5, ST_LINE);
     for (x = 0; x < w; x += 2) {
         int32_t p = (int32_t)((x + (int32_t)(now / 40u)) & 31), tri = p < 16 ? p : 31 - p;
-        fill(x0 + x, y + (amp ? (tri - 8) * amp / 8 : 0), 2, 1, ST_LINE);
+        fill(x0 + x, y + (amp ? (tri - 8) * amp / 8 : 0), 2, 1, sel ? ST_DIM : ST_LINE);
     }
     for (b = 0; b < 32; b++)
         if (ms_vis.lp_dots[t] >> b & 1u)
-            disc(x0 + 2 + b * (w - 4) / 31, y, muted ? 1 : 2, c);
-    n[0] = 0;
-    if (rec)
-        text_cat(n, "REC");
-    else if (!used)
-        text_cat(n, "-");
-    else if (ui.track_lvl[t])
-        int_text(ui.track_lvl[t], n);
-    else
-        text_cat(n, ui.confirm[t] ? "CLEAR" : "OFF");
-    cv_text(234 - text_w(&FONT_T, n), y - 6, &FONT_T, n, rec ? c : used ? ST_TEXT : ST_DIM);
+            disc(x0 + 2 + b * (w - 4) / 31, y, 1, c);
+    if (redo)
+        fill(4, y - 1, 10, 3, red);
+    else if (used)
+        fill(6, y - 1, 6, 3, c);
+}
+
+static void loops_lane_label(uint32_t now, int32_t y0)
+{
+    int t = ui.sel_track;
+    char n[12];
+    n[0] = (char)('1' + t);
+    n[1] = 0;
+    if (ms_vis.lp_redo == t)
+        text_cat(n, " REDO");
+    else if (!(ms_vis.lp_tracks >> t & 1u))
+        text_cat(n, " EMPTY");
+    else if (!ui.track_lvl[t] || ms_vis.lp_mute >> t & 1u)
+        text_cat(n, " OFF");
+    cv_text(234 - text_w(&FONT_T, n), y0 + t * 6 - 6, &FONT_T, n, ms_vis.lp_redo == t ? RGB(240, 96, 96) : ST_TEXT);
+    (void)now;
 }
 
 static void loops_library(rgb_t acc)
@@ -370,7 +382,7 @@ static void loops_library(rgb_t acc)
 static void loops_view(uint32_t now)
 {
     static const char *const TIP[3][2] = {
-        {"TURN A LAYER DOWN TO MUTE IT", "PAST OFF IT IS CLEARED"},
+        {"LAYER PICKS ONE. REDO: PLAY IT AGAIN", "CLEAR: A FULL TURN RIGHT"},
         {"FADE AND MUTATE: EACH TIME ROUND", "SHIFT NUDGES IT A 16TH"},
         {"THE TAPE CHANGES ONLY THE LOOP", "NOT THE REST OF THE MUSIC"},
     };
@@ -378,7 +390,7 @@ static void loops_view(uint32_t now)
     const char *state, *hint;
     uint16_t c;
     int blink;
-    int32_t t, px = 22 + (int32_t)(180.0f * ms_vis.lp_pos);
+    int32_t t, px = 22 + (int32_t)(160.0f * ms_vis.lp_pos);
     char n[24];
     loops_tabs(acc);
     loops_status(now, &state, &hint, &c, &blink);
@@ -402,10 +414,12 @@ static void loops_view(uint32_t now)
         }
     }
     cv_text(234 - text_w(&FONT_T, n), 58, &FONT_T, n, ST_SOFT);
-    for (t = 0; t < 4; t++)
-        loops_lane(t, 84 + t * 12, now, acc);
+    for (t = 0; t < MS_NLAYERS; t++)
+        loops_lane(t, 78 + t * 6, now, acc);
     if (ms_vis.lp_state == MS_LOOP_PLAY || ms_vis.lp_state == MS_LOOP_DUB)
-        fill(px, 76, 1, 50, ST_TEXT);
+        fill(px, 74, 1, 50, ST_TEXT);
+    if (set.page == PG_LOOP)
+        loops_lane_label(now, 78);
     centred(130, &FONT_T, hint, ST_TEXT);
     if (set.page == PG_LIBRARY) {
         loops_library(acc);

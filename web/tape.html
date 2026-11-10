@@ -276,7 +276,9 @@
     const v = new DataView(b.buffer), n = b.length >= 8 ? b[2] : 0, ev = [];
     for (let i = 0; i < n && 8 + i * 6 + 6 <= b.length; i++) {
       const o = 8 + i * 6;
-      ev.push({ t: v.getUint16(o, true), dur: v.getUint16(o + 2, true), note: b[o + 4], vel: b[o + 5] >> 2, track: b[o + 5] & 3 });
+      const vt = b[o + 5], eight = b[5] === 2;   /* format 2: eight layers, velocity in 5 bits */
+      ev.push({ t: v.getUint16(o, true), dur: v.getUint16(o + 2, true), note: b[o + 4],
+        vel: eight ? (vt >> 3) << 1 : vt >> 2, track: eight ? vt & 7 : vt & 3 });
     }
     return { len: b.length >= 2 ? v.getUint16(0, true) : 0, tempo: b[4] || 72, mute: b[3], ev };
   };
@@ -289,7 +291,7 @@
     const us = Math.round(60e6 / loop.tempo);
     const tracks = [[...text(3, 'MOSS-1 loop'), 0, 0xff, 0x51, 3, us >> 16 & 255, us >> 8 & 255, us & 255,
       0, 0xff, 0x58, 4, 4, 2, 24, 8, 0, 0xff, 0x2f, 0]];
-    for (let t = 0; t < 4; t++) {
+    for (let t = 0; t < 8; t++) {
       const notes = loop.ev.filter(e => e.track === t);
       if (!notes.length) continue;
       const evs = [];

@@ -57,8 +57,13 @@ void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 a
 void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spread, 0..100 */
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */
-void ms_track(int t, int v);           /* loop track 0..3: v 0..100 its level, -1 mute, -3 unmute, -2 clear */
-/* a loop as saved: times in ms, 64 notes at most (the loudest), vt = velocity 0..63 << 2 | track */
+#define MS_NLAYERS 8
+/* loop layer 0..MS_NLAYERS - 1: v 0..100 its level, -1 mute, -3 unmute, -2 clear, -4/-5 shift later/earlier,
+ * -6 the next phrase replaces it (REDO), -7 not */
+void ms_track(int t, int v);
+/* a loop as saved: times in ms, 64 notes at most (the loudest), vt = velocity 1..31 << 3 | layer 0..7; rsv[0] the
+ * format, MS_SLOT_FORMAT (0: an older one, velocity 1..63 << 2 | layer 0..3) */
+#define MS_SLOT_FORMAT 2
 #define MS_SLOT_EVENTS 64
 typedef struct {
     uint16_t t_ms, dur_ms;
@@ -113,7 +118,8 @@ typedef struct {
     volatile uint16_t drums[3];        /* the beat: kick, snare, hat steps, bit per sixteenth */
     volatile uint8_t beat_len, beat_step;   /* the pattern's length in sixteenths (12 or 16), where it is */
     volatile uint32_t hold[4];         /* HOLD: the notes planted, bit per MIDI note */
-    volatile uint32_t lp_dots[4];      /* each loop track's notes in 32 time bins */
+    volatile uint32_t lp_dots[MS_NLAYERS];   /* each loop layer's notes in 32 time bins */
+    volatile int8_t lp_redo;           /* the layer armed for REDO, -1 none */
     volatile uint8_t lp_tracks, lp_mute, lp_track;   /* tracks holding notes and muted (bit each), the one recording */
     volatile uint32_t xfer_seq;
     volatile uint8_t lp_keep;          /* the loop is kept: it does not fade */

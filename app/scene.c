@@ -474,9 +474,9 @@ static void loop_bar(uint32_t now)
     pill(10, 216, 220, 18, RGB(14, 14, 22));
     cv_text(16, 219, &FONT_T, st == MS_LOOP_PLAY && ms_vis.lp_keep ? "KEPT" : NAME[st], c);
     fill(x0, 223, w, 4, RGB(50, 50, 62));
-    for (t = 0; t < 4; t++) {                 /* the tracks: lit, dim when muted, dark when empty */
+    for (t = 0; t < MS_NLAYERS; t++) {        /* the layers: lit, dim when muted, dark when empty */
         int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
-        fill(194 + t * 8, 221, 6, 8, !used ? RGB(50, 50, 62) : muted ? RGB(110, 105, 95) : cream);
+        fill(190 + t * 5, 221, 3, 8, !used ? RGB(50, 50, 62) : muted ? RGB(110, 105, 95) : cream);
     }
     if (st == MS_LOOP_REC) {                  /* no length yet, so pulse */
         if (now / 300u & 1u)

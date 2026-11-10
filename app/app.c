@@ -21,7 +21,7 @@ static const char *const TAP_NAME[3] = {"PLAY", "LISTEN", "HOLD"};
 static const char *const SPEED_NAME[5] = {"1/2", "1x", "2x", "REV", "REV 1/2"};
 static const char *const PAGE_KNOBS[NPAGES][4] = {
     {0}, {0}, {"DELAY", "TIME", "REPEATS", "FILM"}, {"MOD", "RANDOM", "TONE", "SPREAD"}, {"KIT", "PATTERN", "LEVEL", "BASS"},
-    {"SNAP", "HARMONY", "VOICE", "TAP"}, {"LAYER 1", "LAYER 2", "LAYER 3", "LAYER 4"}, {"FADE", "MUTATE", "SHIFT", "SPEED"},
+    {"SNAP", "HARMONY", "VOICE", "TAP"}, {"LAYER", "LEVEL", "REDO", "CLEAR"}, {"FADE", "MUTATE", "SHIFT", "SPEED"},
     {"WARBLE", "DIRT", "AGE", "SMEAR"}, {"LOOP", "", "", "DELETE"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
@@ -183,10 +183,19 @@ void app_init(void)
         slots.magic = SLOTS_MAGIC;
     }
     {
-        int i;
-        for (i = 0; i < NSLOTS; i++)
-            if (slots.s[i].n > MS_SLOT_EVENTS)
-                slots.s[i].n = 0;
+        int i, j;
+        for (i = 0; i < NSLOTS; i++) {
+            ms_slot_t *sl = &slots.s[i];
+            if (sl->n > MS_SLOT_EVENTS)
+                sl->n = 0;
+            if (sl->n && sl->rsv[0] != MS_SLOT_FORMAT) {   /* saved when there were four layers */
+                for (j = 0; j < sl->n; j++) {
+                    int v = sl->ev[j].vt >> 3;
+                    sl->ev[j].vt = (uint8_t)((v ? v : 1) << 3 | (sl->ev[j].vt & 3u));
+                }
+                sl->rsv[0] = MS_SLOT_FORMAT;
+            }
+        }
     }
     if (loop_page(set.page) != (set.view == VIEW_LOOPS))
         set.page = set.view == VIEW_LOOPS ? PG_LOOP : PG_HOME;
@@ -216,15 +225,14 @@ static struct {
     uint32_t keys, btn;
     uint32_t save_t, arp_t;
     uint8_t key_note[NKEYS];             /* note sent at key down, so the note-off matches after an octave change */
-    uint8_t track_lvl[4];                /* the LOOP page's levels; not saved, as the loop itself is not */
+    uint8_t track_lvl[MS_NLAYERS];       /* the layers' levels; not saved, as the loop itself is not */
     uint8_t sel_track, sel_slot;
     uint8_t confirm[4];                  /* detents turned so far on an acting knob */
     uint32_t confirm_t;
     uint32_t seq_t;
     uint8_t view_before, page_before;    /* where the LOOPS screen was opened from, to go back to */
     uint8_t tracks_seen;                 /* ms_vis.lp_tracks last frame: a layer appearing gets its level back */
-    uint32_t off_at[4];                  /* when each layer was turned to OFF */
-    uint8_t save_long;                   /* SAVE held long enough to reset on release */
+    uint8_t save_long;                   /* SAVE held: 1 resets the scene on release, 2 everything */
     int8_t slot_save;                    /* the library entry a snapshot is on its way to, -1 none */
     int8_t lib_cur;                      /* the entry the playing loop is kept in, -1 none */
     int8_t lib_load_idx;                 /* the entry being loaded, -1 none */
@@ -315,7 +323,8 @@ static int knob_value(int i)   /* 0..100 */
     int m = set.mode, steps = PAGE_STEPS[set.page][i];
     uint8_t *v = page_vals(set.page);
     if (set.page == PG_LOOP)
-        return ui.track_lvl[i];
+        return i == 0 ? ui.sel_track * 100 / (MS_NLAYERS - 1) : i == 1 ? ui.track_lvl[ui.sel_track]
+             : i == 2 ? (ms_vis.lp_redo == ui.sel_track ? 100 : 0) : ui.confirm[3] * 100 / CONFIRM_CLEAR;
     if (set.page == PG_LIBRARY)
         return i == 0 ? ui.sel_slot * 100 / 7 : i == 3 ? ui.confirm[3] * 100 / CONFIRM_LONG : 0;
     if (set.page == PG_SHAPE && i == 2)
@@ -340,12 +349,20 @@ static void knob_text(int i, char *t)
     int m = set.mode;
     t[0] = 0;
     if (set.page == PG_LOOP) {
-        if (!(ms_vis.lp_tracks >> i & 1u))
-            text_cat(t, "-");
-        else if (ui.track_lvl[i])
-            int_text(ui.track_lvl[i], t);
-        else
-            text_cat(t, ui.confirm[i] ? "< CLEAR" : "OFF");
+        int sel = ui.sel_track, used = ms_vis.lp_tracks >> sel & 1u;
+        if (i == 0) {
+            int_text(sel + 1, t);
+            text_cat(t, used ? "" : " EMPTY");
+        } else if (i == 1) {
+            if (ui.track_lvl[sel])
+                int_text(ui.track_lvl[sel], t);
+            else
+                text_cat(t, "OFF");
+        } else if (i == 2) {
+            text_cat(t, ms_vis.lp_redo == sel ? "ARMED" : "TURN >");
+        } else {
+            text_cat(t, ui.confirm[3] ? "MORE >" : "TURN >");
+        }
         return;
     }
     if (set.page == PG_LIBRARY) {
@@ -409,41 +426,56 @@ static void layer_name(int i, char *t)
     t[7] = 0;
 }
 
-/* LAYERS: each knob a layer's level. Down to OFF mutes it; keep turning down and it is cleared */
+/* LAYERS works on one layer at a time: K1 picks it, K2 its level (down is OFF), K3 right arms REDO (the next
+ * phrase you play replaces it; you hear the old one until then), K4 a full turn right clears it */
 static int layer_turn(int i, int32_t d)
 {
     char t[12];
-    int used = ms_vis.lp_tracks >> i & 1u;
-    layer_name(i, t);
-    if (!used) {
-        app_say(t, "EMPTY. PLAY TO FILL IT");
+    int sel = ui.sel_track, used = ms_vis.lp_tracks >> sel & 1u;
+    if (i == 0) {
+        ui.sel_track = (uint8_t)clamp(sel + d, 0, MS_NLAYERS - 1);
+        ui.confirm[3] = 0;
+        layer_name(ui.sel_track, t);
+        app_say(t, ms_vis.lp_tracks >> ui.sel_track & 1u ? "" : "EMPTY");
         return 1;
     }
-    if (ui.track_lvl[i] == 0 && d < 0) {
-        if (plat_ms() - ui.off_at[i] < 400u)   /* a quick spin down stops at OFF; clearing takes a second turn */
-            return 1;
-        ui.confirm_t = plat_ms();
-        ui.confirm[i] = (uint8_t)clamp(ui.confirm[i] - d, 0, CONFIRM_CLEAR);
-        if (ui.confirm[i] < CONFIRM_CLEAR) {
-            app_say(t, "TURN MORE TO CLEAR");
+    layer_name(sel, t);
+    if (i == 1) {
+        ui.track_lvl[sel] = (uint8_t)clamp(ui.track_lvl[sel] + 2 * d, 0, 100);
+        ms_track(sel, ui.track_lvl[sel]);
+        if (!ui.track_lvl[sel])
+            app_say(t, "OFF");
+        return !ui.track_lvl[sel];
+    }
+    if (i == 2) {
+        if (ms_vis.lp_state == MS_LOOP_EMPTY) {
+            app_say("REDO", "NO LOOP YET");
             return 1;
         }
-        ui.confirm[i] = 0;
-        ms_track(i, -2);
-        ui.track_lvl[i] = LAYER_LVL;
-        ms_track(i, LAYER_LVL);
-        app_say(t, "CLEARED");
+        ms_track(sel, d > 0 ? -6 : -7);
+        app_say(t, d > 0 ? (used ? "PLAY TO REDO IT" : "PLAY TO FILL IT") : "REDO OFF");
         return 1;
     }
-    ui.confirm[i] = 0;
-    ui.track_lvl[i] = (uint8_t)clamp(ui.track_lvl[i] + 2 * d, 0, 100);
-    ms_track(i, ui.track_lvl[i]);
-    if (ui.track_lvl[i] == 0) {
-        ui.off_at[i] = plat_ms();
-        app_say(t, "OFF");
+    if (!used) {
+        app_say(t, "EMPTY");
         return 1;
     }
-    return 0;
+    if (d < 0) {
+        ui.confirm[3] = 0;
+        return 1;
+    }
+    ui.confirm_t = plat_ms();
+    ui.confirm[3] = (uint8_t)clamp(ui.confirm[3] + d, 0, CONFIRM_CLEAR);
+    if (ui.confirm[3] < CONFIRM_CLEAR) {
+        app_say(t, "KEEP TURNING TO CLEAR");
+        return 1;
+    }
+    ui.confirm[3] = 0;
+    ms_track(sel, -2);
+    ui.track_lvl[sel] = LAYER_LVL;
+    ms_track(sel, LAYER_LVL);
+    app_say(t, "CLEARED");
+    return 1;
 }
 
 /* a layer recorded where one was turned off or cleared starts at its usual level, so it is heard */
@@ -451,7 +483,7 @@ static void tracks_tick(void)
 {
     uint8_t now = ms_vis.lp_tracks, born = (uint8_t)(now & ~ui.tracks_seen);
     int i;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < MS_NLAYERS; i++)
         if (born >> i & 1u && ui.track_lvl[i] == 0) {
             ui.track_lvl[i] = LAYER_LVL;
             ms_track(i, LAYER_LVL);
@@ -472,7 +504,7 @@ static int pages_act(int i, int32_t d)
             return 1;
         }
         while (n--)
-            for (t = 0; t < 4; t++)
+            for (t = 0; t < MS_NLAYERS; t++)
                 ms_track(t, d > 0 ? -4 : -5);
         app_say("SHIFT", d > 0 ? "LATER" : "EARLIER");
         return 1;
@@ -918,10 +950,23 @@ static void input(void)
             if (!ui.save_long && now - ui.save_t >= 2000u) {
                 ui.save_long = 1;
                 app_say("LET GO TO", "RESET SCENE");
+            } else if (ui.save_long == 1 && now - ui.save_t >= 6000u) {
+                ui.save_long = 2;
+                app_say("LET GO TO", "RESET EVERYTHING");
             }
         } else {
             ui.save_t = 0;
-            if (ui.save_long) {
+            if (ui.save_long == 2) {     /* every setting as it first starts; the loop library stays */
+                settings_defaults();
+                ms_loop(1);
+                ms_panic();
+                send_all();
+                ui.frozen = 0;
+                ms_freeze(0);
+                set_dirty = 1;
+                page_set(PG_HOME);
+                app_say("EVERYTHING RESET", "SAVE TO KEEP IT");
+            } else if (ui.save_long) {
                 scene_recipe(set.mode);
                 send_all();
                 set_dirty = 1;
@@ -1043,7 +1088,9 @@ void app_ui_init(void)
 {
     static int started;
     if (!started) {
-        ui.track_lvl[0] = ui.track_lvl[1] = ui.track_lvl[2] = ui.track_lvl[3] = LAYER_LVL;
+        int i;
+        for (i = 0; i < MS_NLAYERS; i++)
+            ui.track_lvl[i] = LAYER_LVL;
         ui.slot_save = -1;
         ui.lib_cur = ui.lib_load_idx = -1;
         ui.lib_gen = ms_vis.lp_gen;                      /* also called after an aborted update: keep play and sleep state */
@@ -1112,6 +1159,10 @@ else if (!strcmp(what, "held"))
         *got = ui.lib_cur;
     else if (!strncmp(what, "slot", 4))   /* slotN: how many notes library entry N holds */
         *got = slots.s[atoi(what + 4) % NSLOTS].n;
+    else if (!strcmp(what, "redo"))
+        *got = ms_vis.lp_redo;
+    else if (!strcmp(what, "layer"))
+        *got = ui.sel_track;
     else if (!strcmp(what, "keep"))
         *got = ms_vis.lp_keep;
     else if (!strcmp(what, "dots0"))      /* track 1's notes, bit per 32nd of the loop */

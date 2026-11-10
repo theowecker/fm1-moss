@@ -1,0 +1,15 @@
+# SAVE held six seconds and let go: every setting as it first starts, the loop library kept
+wait 600
+tap GLO
+turn K1 20
+turn PRESET -3
+wait 300
+expect page 10
+press SAVE
+wait 6500
+release SAVE
+wait 300
+expect page 0
+expect scene 4
+expect tempo 96
+expect view 0

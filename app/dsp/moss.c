@@ -1813,7 +1813,7 @@ static void key_sound(int8_t out[3], int note, float vel, int layer, int32_t gat
 }
 
 enum { LP_EMPTY, LP_REC, LP_PLAY, LP_DUB };
-#define NLEV 96
+#define NLEV 128
 #define LOOP_MAX_S 60.0f
 typedef struct {
     float t, dur, vel;
@@ -1827,13 +1827,14 @@ static struct {
     float fade, mutate, smear;
     int autorec;                       /* LISTEN started the recording, so a pause closes it */
     float quiet;                       /* samples since the last key event */
-    int track;                         /* where new notes go, 0..3 */
+    int track;                         /* where new notes go, 0..MS_NLAYERS - 1 */
+    int redo;                          /* the layer the next phrase replaces, -1 none */
     int keep;                          /* REC kept it: it no longer fades */
     int synced;                        /* a beat to follow: the loop is whole bars and its notes sit on the groove */
     float rec_off;                     /* where in the bar the recording began, samples */
     float rec_end;                     /* the clock when it closed, before a quiet tail was cut */
     uint32_t mute;                     /* bit per track */
-    float tgain[4];
+    float tgain[MS_NLAYERS];
 } lp;
 
 static int loop_next_track(void)
@@ -1842,13 +1843,28 @@ static int loop_next_track(void)
     int i;
     for (i = 0; i < lp.n; i++)
         used |= 1u << lp.ev[i].track;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < MS_NLAYERS; i++)
         if (!(used >> i & 1u)) {
             lp.mute &= ~(1u << i);   /* a stale mute must not silence what is recorded next */
             return i;
         }
-    lp.mute &= ~(1u << 3);
-    return 3;
+    lp.mute &= ~(1u << (MS_NLAYERS - 1));
+    return MS_NLAYERS - 1;
+}
+
+/* the layer a new phrase goes on: the one armed for REDO, emptied now that its new take begins, else a free one */
+static int loop_phrase_track(void)
+{
+    int t = lp.redo, i, kept = 0;
+    if (t < 0)
+        return loop_next_track();
+    for (i = 0; i < lp.n; i++)
+        if (lp.ev[i].track != t || lp.ev[i].open)
+            lp.ev[kept++] = lp.ev[i];
+    lp.n = kept;
+    lp.mute &= ~(1u << t);
+    lp.redo = -1;
+    return t;
 }
 static const float LOOP_RATE[5] = {0.5f, 1.0f, 2.0f, 1.0f, 0.5f};   /* speeds 3 and 4 play backwards */
 
@@ -1966,7 +1982,7 @@ static void loop_tap(void)
         ms_vis.lp_gen++;
         break;
     case LP_PLAY:
-        lp.track = loop_next_track();
+        lp.track = loop_phrase_track();
         lp.state = LP_DUB;
         break;
     default:
@@ -2007,16 +2023,19 @@ static void loop_pass(void)
 /* each track's notes as 32 time bins, for the screen */
 static void loop_vis(void)
 {
-    uint32_t dots[4] = {0, 0, 0, 0}, used = 0;
+    uint32_t dots[MS_NLAYERS] = {0}, used = 0;
     int i;
     for (i = 0; i < lp.n; i++) {
         float len = lp.state == LP_REC ? lp.pos : lp.len;
         int b = len > 0.0f ? (int)(lp.ev[i].t / len * 32.0f) : 0;
-        dots[lp.ev[i].track & 3u] |= 1u << clamp(b, 0, 31);
-        used |= 1u << (lp.ev[i].track & 3u);
+        dots[lp.ev[i].track % MS_NLAYERS] |= 1u << clamp(b, 0, 31);
+        used |= 1u << (lp.ev[i].track % MS_NLAYERS);
     }
-    for (i = 0; i < 4; i++)
+    if (lp.state == LP_EMPTY)
+        lp.redo = -1;
+    for (i = 0; i < MS_NLAYERS; i++)
         ms_vis.lp_dots[i] = dots[i];
+    ms_vis.lp_redo = (int8_t)lp.redo;
     ms_vis.lp_tracks = (uint8_t)used;
     ms_vis.lp_mute = (uint8_t)lp.mute;
     ms_vis.lp_track = (uint8_t)lp.track;
@@ -2033,6 +2052,7 @@ static void loop_snap(void)
     o->len_ms = (uint16_t)fm_minf(lp.len / MS_SR * 1000.0f, 65000.0f);
     o->mute = (uint8_t)lp.mute;
     o->tempo = (uint8_t)st.tempo;
+    o->rsv[0] = MS_SLOT_FORMAT;
     if (lp.state != LP_PLAY && lp.state != LP_DUB)
         return;
     for (i = 0; i < lp.n; i++) {         /* by velocity, loudest first: the ones that fit are kept */
@@ -2049,7 +2069,7 @@ static void loop_snap(void)
         d->t_ms = (uint16_t)fm_minf(e->t / MS_SR * 1000.0f, 65000.0f);
         d->dur_ms = (uint16_t)fm_minf(e->dur / MS_SR * 1000.0f, 65000.0f);
         d->note = (uint8_t)clamp(e->note, 0, 127);
-        d->vt = (uint8_t)(clamp((int)(e->vel * 63.0f + 0.5f), 1, 63) << 2 | (e->track & 3u));
+        d->vt = (uint8_t)(clamp((int)(e->vel * 31.0f + 0.5f), 1, 31) << 3 | (e->track & 7u));
     }
     o->n = (uint8_t)i;
 }
@@ -2065,8 +2085,8 @@ static void loop_load(void)
         e->t = (float)o->ev[i].t_ms * (MS_SR / 1000.0f);
         e->dur = (float)o->ev[i].dur_ms * (MS_SR / 1000.0f);
         e->note = (int8_t)clamp(o->ev[i].note, 0, 127);
-        e->vel = (float)(o->ev[i].vt >> 2) / 63.0f;
-        e->track = o->ev[i].vt & 3u;
+        e->vel = (float)(o->ev[i].vt >> 3) / 31.0f;
+        e->track = o->ev[i].vt & 7u;
         e->open = 0;
     }
     lp.n = n;
@@ -2074,7 +2094,8 @@ static void loop_load(void)
     for (i = 0; i < n; i++)              /* times past the end (a corrupt slot) fold back in */
         if (lp.ev[i].t >= lp.len)
             lp.ev[i].t -= fm_floorf(lp.ev[i].t / lp.len) * lp.len;
-    lp.mute = o->mute & 15u;
+    lp.mute = o->mute;
+    lp.redo = -1;
     lp.u = 0.0f;
     lp.autorec = 0;
     lp.track = loop_next_track();
@@ -2363,8 +2384,8 @@ void ms_note_now(int note, int vel)
             voice_release_note(h[i], SRC_KEYS);
             h[i] = -1;
         }
-    if (vel && kb.listen && lp.state == LP_PLAY && lp.quiet > 2.0f * MS_SR)
-        lp.track = loop_next_track();    /* a new phrase after a pause gets its own track */
+    if (vel && kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0))
+        lp.track = loop_phrase_track();  /* a new phrase after a pause gets its own track */
     lp.quiet = 0.0f;
     if (vel) {
         key_sound(h, note, (float)vel / 127.0f, SRC_KEYS, -1, 0.0f);
@@ -2543,8 +2564,10 @@ static void drain(void)
             ms_vis.xfer_seq++;
             break;
         case C_TRACK: {
-            int t = c.a & 3, i, kept = 0;
-            if (c.b >= 0) {
+            int t = c.a % MS_NLAYERS, i, kept = 0;
+            if (c.b == -6 || c.b == -7) {
+                lp.redo = c.b == -6 ? t : -1;
+            } else if (c.b >= 0) {
                 lp.tgain[t] = lvl(clamp(c.b, 0, 100));
             } else if (c.b == -1) {
                 for (i = 0; i < lp.n; i++)
@@ -3165,7 +3188,9 @@ void ms_init(void)
     st.playing = 1;
     st.sleep_target = ms.sleep = 1.0f;
     bt.level = 1.0f;
-    lp.tgain[0] = lp.tgain[1] = lp.tgain[2] = lp.tgain[3] = 1.0f;
+    for (i = 0; i < MS_NLAYERS; i++)
+        lp.tgain[i] = 1.0f;
+    lp.redo = -1;
     ms.drop_g = 1.0f;
     st.layer[SRC_KEYS] = st.layer[SRC_LOOP] = 1.0f;
     st.fx[0] = 30;

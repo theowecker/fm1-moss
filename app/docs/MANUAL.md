@@ -35,7 +35,7 @@ picks up what you play.
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
 | SEQ | The next screen: PICTURE, STUDIO, LOOPS |
-| SAVE | Save your settings and your loop library. Hold for two seconds and let go to reset the scene |
+| SAVE | Save your settings and your loop library. Hold for two seconds and let go to reset the scene. Hold for six to reset everything (your saved loops stay) |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
 
@@ -59,6 +59,10 @@ and the FX, MOTION, KEYS, SHAPE and TAPE pages stay as you set them, whatever th
 
 To get a scene back to how it started, hold SAVE until the screen says LET GO TO RESET SCENE, then let go. That
 resets its HOME and MIX knobs, tempo, mood and beat.
+
+To put everything back to how MOSS-1 first starts, keep holding SAVE until the screen says LET GO TO RESET
+EVERYTHING (about six seconds), then let go. Every setting goes back, the loop playing is cleared and the loop
+library is kept. Press SAVE afterwards to keep it that way.
 
 ![](img/lofi-study.png)
 
@@ -187,12 +191,17 @@ The old loop stays in the library and the next thing you play starts a new one.
 
 ![](img/loop-page.png)
 
-One knob per layer: K1 is layer 1, K2 layer 2, and so on.
+A loop holds up to eight layers. This page works on one at a time.
 
-- Turn a layer down to OFF to mute it, and back up to bring it back.
-- Keep turning down past OFF and the knob says CLEAR: a few more clicks and that layer is erased, so the next phrase
-  you play can go there.
-- A new layer always starts at the same level, even where one was turned off before.
+| Knob | What it does |
+| --- | --- |
+| LAYER | Picks the layer, 1 to 8. Its lane is marked and its number shows on the right |
+| LEVEL | That layer's level. All the way down is OFF, which mutes it |
+| REDO | Turn right to redo that layer: it plays on until you start playing, then what you play replaces it. Its lane pulses red while it waits. Turn left to change your mind |
+| CLEAR | Keep turning right until the gauge fills: that layer is erased |
+
+A new layer always starts at the same level, even where one was turned off before. When all eight are used, new
+notes go on layer 8.
 
 ### SHAPE (LFO again)
 
@@ -258,7 +267,7 @@ Turn ALGORITHM.
 With TAP on LISTEN (where it starts), you just play:
 
 1. Play a few notes and stop. After two seconds of quiet they loop.
-2. Play again and the new phrase goes on top as a new layer, up to four.
+2. Play again and the new phrase goes on top as a new layer, up to eight.
 3. The loop slowly fades while you leave it, and changes a little each time round (SHAPE sets how much).
 4. **Tap REC to keep it.** It stops fading. Tap REC again to let it fade.
 5. **Hold REC for a second to clear it** and start a new one.
@@ -274,7 +283,7 @@ When there is a beat (LOFI, or a kit on the BEAT page), the loop is a whole numb
 notes sit on the beat's grid with its swing, so it stays in time with the drums. Without a beat the loop keeps the
 timing you played.
 
-The bar at the bottom of the picture shows the loop: red while recording, then FADING or KEPT. The four squares
+The bar at the bottom of the picture shows the loop: red while recording, then FADING or KEPT. The eight squares
 next to it are the layers: bright when on, grey when off, dark when empty. REC's light blinks fast while recording,
 slowly while the loop fades, and stays on when it is kept.
 
