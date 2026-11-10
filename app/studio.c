@@ -372,6 +372,8 @@ static void loops_library(rgb_t acc)
             text_cat(n, "-");
         }
         cv_text(x + 16, y, &FONT_T, n, sl->n ? ST_TEXT : ST_DIM);
+        if (sl->n && ui.unsaved >> i & 1u)   /* lost at power-off until SAVE */
+            disc(x + 50, y + 5, 2, RGB(240, 96, 96));
     }
 }
 
@@ -422,6 +424,8 @@ static void loops_view(uint32_t now)
             text_cat(n, "GLO AGAIN DELETES LOOP ");
             int_text(ui.sel_slot + 1, n + text_len(n));
             centred(130, &FONT_T, n, RGB(240, 96, 96));
+        } else if (ui.unsaved && now / 3000u & 1u) {
+            centred(130, &FONT_T, "A RED DOT: NOT SAVED. SAVE KEEPS IT", RGB(240, 96, 96));
         } else {
             centred(130, &FONT_T, "TURN LOOP TO PLAY ONE. GLO DELETES", ST_TEXT);
         }

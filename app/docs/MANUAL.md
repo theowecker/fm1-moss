@@ -37,7 +37,7 @@ picks up what you play.
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
 | SEQ | The next screen: PICTURE, STUDIO, LOOPS, CHORDS, BEAT |
-| SAVE | Save your settings and your loop library. Hold for two seconds and let go to reset the scene. Hold for six to reset everything (your saved loops stay) |
+| SAVE | Save your settings and your loop library (it lights while something isn't saved; with nothing playing, MOSS-1 saves by itself). Hold for two seconds and let go to reset the scene. Hold for six to reset everything (your saved loops stay) |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
 
@@ -453,8 +453,9 @@ loop. Press REC once more to record another layer over it, and again to keep tha
 
 **Every loop goes into the library by itself.** The one playing is kept up to date as you add layers, and when you
 clear it and start a new one, the old one stays in the list. The library holds your last eight. To keep them after
-you turn the FM-1 off, press SAVE (SAVE stays lit while there is something to save). Writing to the flash stops the
-sound for a moment, so it only happens when you press SAVE.
+you turn the FM-1 off, press SAVE. Until you do, LIBRARY shows a red dot by each loop that isn't saved yet, and the
+SAVE button stays lit. Writing to the flash stops the sound for a moment, so MOSS-1 only does it when you press SAVE,
+or by itself when nothing is playing: the music stopped with PLAY and no loop going, or the sleep timer done.
 
 When there is a beat (LOFI, or a kit on the BEAT screen), the loop is a whole number of bars, 1, 2, 4 or 8, and its
 notes sit on the beat's grid with its swing, so it stays in time with the drums. Without a beat the loop keeps the

@@ -397,6 +397,10 @@ static struct {
     int8_t lib_cur;                      /* the entry the playing loop is kept in, -1 none */
     int8_t lib_load_idx;                 /* the entry being loaded, -1 none */
     uint8_t lib_dirty;                   /* the library changed since SAVE */
+    uint8_t unsaved;                     /* the library entries that would be lost at power-off, bit each */
+    uint32_t quiet_t;                    /* nothing sounding since, plat_ms | 1; 0 while something does */
+    uint8_t autosaved;                   /* this quiet stretch has had its save */
+    uint8_t goodnight;                   /* the sleep timer faded everything out, the loop too */
     uint32_t lib_gen, lib_snap_t;
     uint8_t xfer_busy, export_state;
     uint32_t xfer_wait, xfer_t;
@@ -1492,7 +1496,8 @@ static void page_set(int p)
     app_say(PAGE_NAME[p], "");
 }
 
-/* settings and the loop library to the flash: the sound stops for a moment while it writes, so only on SAVE */
+/* settings and the loop library to the flash: the sound stops for a moment while it writes, so only on SAVE, or
+ * by itself while nothing sounds (autosave_tick) */
 static void save(void)
 {
     int ok;
@@ -1503,9 +1508,28 @@ static void save(void)
     if (ok) {
         set_dirty = 0;
         ui.lib_dirty = 0;
+        ui.unsaved = 0;
         app_say("SAVED", "SETTINGS AND LOOPS");
     } else {
         app_say("SAVE", "FAILED");
+    }
+}
+
+/* the music stopped and no loop playing (or the sleep timer's fade done) for a moment: save by itself, as the flash
+ * write's gap in the sound can't be heard then */
+static void autosave_tick(uint32_t now)
+{
+    int quiet = !ui.playing && (ms_vis.lp_state == MS_LOOP_EMPTY || ui.goodnight);
+    if (!quiet || ui.xfer_busy || ui.export_state) {
+        ui.quiet_t = 0;
+        ui.autosaved = 0;
+        return;
+    }
+    if (!ui.quiet_t)
+        ui.quiet_t = now | 1u;
+    if (!ui.autosaved && (set_dirty || ui.lib_dirty) && since(now, ui.quiet_t) >= 1500) {
+        ui.autosaved = 1;
+        save();
     }
 }
 
@@ -1525,6 +1549,7 @@ static void sleep_tick(void)
         set.sleep = 0;
         ui.sleep_start = 0;
         ms_sleep_fade(0.0f);
+        ui.goodnight = 1;
         app_say("GOODNIGHT", "");
         return;
     }
@@ -1580,6 +1605,7 @@ static void lib_load(int i)
 static void lib_delete(int i)
 {
     memset(&slots.s[i], 0, sizeof slots.s[i]);
+    ui.unsaved &= (uint8_t)~(1u << i);
     if (ui.lib_cur == i)
         ui.lib_cur = -1;
     ui.lib_dirty = 1;
@@ -1600,6 +1626,7 @@ static void lib_tick(uint32_t now)
             for (i = NSLOTS - 1; i > 0; i--)
                 slots.s[i] = slots.s[i - 1];
             memset(&slots.s[0], 0, sizeof slots.s[0]);
+            ui.unsaved = (uint8_t)(ui.unsaved << 1);   /* the marks move down with their loops */
             ui.lib_cur = 0;
             ui.sel_slot = 0;
             if (set.page == PG_LIBRARY && ui.confirm[3]) {   /* the entries moved: never delete the wrong one */
@@ -1682,6 +1709,7 @@ static void xfer_done(void)
         if (ms_slot_xfer.n && !slot_same(&slots.s[i], &ms_slot_xfer)) {
             slots.s[i] = ms_slot_xfer;
             ui.lib_dirty = 1;
+            ui.unsaved |= (uint8_t)(1u << i);
         }
     } else if (ui.export_state == 2) {
         static const uint8_t done[6] = {0xF0, 0x7D, 0x4D, 0x4F, 0x03, 0xF7};
@@ -1763,6 +1791,7 @@ static void input(void)
         switch (k) {
         case B_PLAY:
             ui.playing = !ui.playing;
+            ui.goodnight = 0;
             ms_play(ui.playing);
             if (ui.playing && !set.sleep)
                 ms_sleep_fade(1.0f);
@@ -2016,6 +2045,7 @@ void app_frame(void)
     input();
     speak();
     sleep_tick();
+    autosave_tick(now);
     if (ui.msg_until && (int32_t)(now - ui.msg_until) >= 0) {
         ui.msg_until = 0;
         ui.redraw = 1;
@@ -2072,6 +2102,10 @@ else if (!strcmp(what, "held"))
         *got = set.b_n;
     else if (!strcmp(what, "chordslot"))
         *got = ms_vis.chord_slot;
+    else if (!strcmp(what, "unsaved"))
+        *got = ui.unsaved;
+    else if (!strcmp(what, "libdirty"))
+        *got = ui.lib_dirty;
     else if (!strcmp(what, "liveroot"))
         *got = ms_vis.live_root;
     else if (!strcmp(what, "livekind"))

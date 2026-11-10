@@ -1,0 +1,31 @@
+# a loop in the library is marked unsaved until SAVE; with the music stopped and no loop playing for a moment,
+# MOSS-1 saves by itself (the flash write's gap can't be heard then), but not while a loop still plays
+wait 600
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+wait 3500
+expect slot0 2
+expect unsaved 1
+expect libdirty 1
+tap PLAY
+wait 2500
+expect loop 2
+expect libdirty 1
+press GLO
+wait 1100
+release GLO
+wait 2500
+expect loop 0
+expect libdirty 0
+expect unsaved 0
+expect dirty 0
+tap PLAY
+wait 100
+tap LFO
+tap LFO
+tap LFO
+tap LFO
+wait 50
+shot library.png
