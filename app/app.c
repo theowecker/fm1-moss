@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include "fastmath.h"
 
-#define SET_MAGIC 0x4D4F5335u            /* "MOS5" */
+#define SET_MAGIC 0x4D4F5336u            /* "MOS6" */
 /* SELECT walks them in this order: the sound, its rhythm, the keys, the loops, then the setup */
 enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_CHORDS, PG_SETUP,
        NPAGES };
@@ -17,7 +17,7 @@ static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "BE
                                               "CHORDS", "SETUP"};
 static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_GLO, B_GLO};
 static const char *const CHANGE_NAME[4] = {"STILL", "SLOW", "NORMAL", "OFTEN"};
-static const char *const PATH_NAME[6] = {"SCENE", "CIRCLE", "DREAM", "MOODY", "SONG", "DRONE"};
+static const char *const PATH_NAME[7] = {"SCENE", "CIRCLE", "DREAM", "MOODY", "SONG", "DRONE", "MINE"};
 static const char *const COLOR_NAME[4] = {"LUSH", "PLAIN", "SUS", "OPEN"};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
 static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"};
@@ -31,7 +31,7 @@ static const char *const PAGE_KNOBS[NPAGES][4] = {
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
 static const uint8_t PAGE_STEPS[NPAGES][4] = {
-    {0}, {0}, {0, 5, 0, 0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 5, 3}, {0},
+    {0}, {0}, {0, 5, 0, 0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 6, 3}, {0},
 };
 #define CONFIRM_WAIT 3000u               /* ms an armed CLEAR or DELETE waits for REC */
 #define LAYER_LVL 70                     /* a layer's level when it is new */
@@ -55,6 +55,7 @@ typedef struct {
     uint8_t keys[4], loop[4], fx[4], tape[4], motion[4];
     uint8_t beat[MS_NMODES][4];          /* kit, pattern, level, bass */
     uint8_t chords[4];                   /* chord (0 AUTO, 1..7), change, path, color */
+    uint8_t mine_n, mine[4];             /* PATH MINE: the progression played on the CHORDS page's keys, degrees 0..6 */
 } settings_t;
 static settings_t set;
 
@@ -100,6 +101,8 @@ static void settings_defaults(void)
     set.fx[0] = 30, set.fx[1] = 2, set.fx[2] = 45, set.fx[3] = 20;
     set.motion[0] = 15, set.motion[1] = 0, set.motion[2] = 30, set.motion[3] = 70;
     set.chords[1] = 2;                    /* NORMAL */
+    set.mine_n = 4;
+    set.mine[0] = 0, set.mine[1] = 5, set.mine[2] = 3, set.mine[3] = 4;   /* I vi IV V until you play your own */
 }
 
 static int knob_ok(int page, int i, int v)
@@ -117,6 +120,11 @@ static int settings_ok(void)
         if (!knob_ok(PG_KEYS, m, set.keys[m]) || !knob_ok(PG_SHAPE, m, set.loop[m]) || !knob_ok(PG_FX, m, set.fx[m])
             || !knob_ok(PG_TAPE, m, set.tape[m]) || !knob_ok(PG_MOTION, m, set.motion[m])
             || !knob_ok(PG_CHORDS, m, set.chords[m]))
+            return 0;
+    if (set.mine_n < 1 || set.mine_n > 4)
+        return 0;
+    for (m = 0; m < 4; m++)
+        if (set.mine[m] > 6)
             return 0;
     for (m = 0; m < MS_NMODES * 4; m++)
         if (!knob_ok(PG_BEAT, m % 4, set.beat[m / 4][m % 4]))
@@ -156,6 +164,11 @@ static void tape_send(int i)
     }
 }
 
+static void mine_send(void)
+{
+    ms_chords(4, set.mine_n << 12 | set.mine[3] << 9 | set.mine[2] << 6 | set.mine[1] << 3 | set.mine[0]);
+}
+
 static void send_all(void)
 {
     int i;
@@ -170,6 +183,7 @@ static void send_all(void)
         ms_chords(i, set.chords[i]);
     }
     ms_space(set.space);
+    mine_send();
     for (i = 0; i < 4; i++)
         ms_beat(i, set.beat[set.mode][i]);
 }
@@ -234,6 +248,7 @@ static struct {
     uint8_t confirm[4];                  /* [3]: CLEAR or DELETE armed, waiting for REC */
     uint32_t confirm_t;
     uint32_t seq_t;
+    uint32_t mine_t;                     /* the last chord key, plat_ms | 1 */
     uint8_t view_before, page_before;    /* where the LOOPS screen was opened from, to go back to */
     uint8_t tracks_seen;                 /* ms_vis.lp_tracks last frame: a layer appearing gets its level back */
     uint8_t save_long;                   /* SAVE held: 1 resets the scene on release, 2 everything */
@@ -359,9 +374,48 @@ static int degree_pc(int d)
     }
 }
 
+static const char *const ROMAN[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
+
+/* the degree of the key a note falls on, a note outside the scale taken as the one below it */
+static int note_degree(int note)
+{
+    uint16_t mask = ms_scale_mask(set.mood[set.mode], set.root);
+    int pc = note % 12, d = 0, p;
+    while (!(mask >> pc & 1u))
+        pc = (pc + 11) % 12;
+    for (p = set.root; p != pc; p = (p + 1) % 12)
+        d += mask >> p & 1u;
+    return d;
+}
+
+/* the CHORDS page's keys: each tap adds the chord on that note to MINE, up to four; after a pause a tap starts anew */
+static void chord_key(int note, uint32_t now)
+{
+    char t[24];
+    int i, d = note_degree(note);
+    if (set.mine_n >= 4 || now - ui.mine_t > 4000u || !ui.mine_t)
+        set.mine_n = 0;
+    ui.mine_t = now | 1u;
+    set.mine[set.mine_n++] = (uint8_t)d;
+    for (i = set.mine_n; i < 4; i++)
+        set.mine[i] = set.mine[set.mine_n - 1];
+    set.chords[2] = 6;                   /* PATH: MINE */
+    set.chords[0] = 0;                   /* CHORD: AUTO, so the progression moves */
+    ms_chords(0, 0);
+    ms_chords(2, 6);
+    mine_send();
+    set_dirty = 1;
+    t[0] = 0;
+    for (i = 0; i < set.mine_n; i++) {
+        if (i)
+            text_cat(t, " ");
+        text_cat(t, ROMAN[set.mine[i]]);
+    }
+    app_say("MINE", t);
+}
+
 static void chords_text(int i, char *t)
 {
-    static const char *const ROMAN[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
     const uint8_t *c = set.chords;
     if (i == 0 && c[0]) {
         text_cat(t, ROMAN[c[0] - 1]);
@@ -894,13 +948,16 @@ static void input(void)
     for (k = 0; k < NKEYS; k++) {
         uint32_t bit = 1u << k;
         int note = 53 + (int)k + 12 * set.octave;
-        if ((keys & bit) && !(ui.keys & bit)) {
+        if ((keys & bit) && !(ui.keys & bit) && set.page == PG_CHORDS) {
+            ui.key_note[k] = 255u;       /* a chord key: no note to end */
+            chord_key(note, now);
+        } else if ((keys & bit) && !(ui.keys & bit)) {
             ui.key_note[k] = (uint8_t)note;
             if (set.keys[3] == 2)        /* HOLD: say what the tap does before the engine does it */
                 app_say(MS_NOTE_NAME[note % 12], ms_vis.hold[note >> 5] >> (note & 31) & 1u ? "PULLED" : "PLANTED");
             ms_note(note, 96);
             plat_midi_out(0x09u | 0x90u << 8 | (uint32_t)note << 16 | 96u << 24);
-        } else if (!(keys & bit) && (ui.keys & bit)) {
+        } else if (!(keys & bit) && (ui.keys & bit) && ui.key_note[k] != 255u) {
             note = ui.key_note[k];
             ms_note(note, 0);
             plat_midi_out(0x08u | 0x80u << 8 | (uint32_t)note << 16);
@@ -1210,6 +1267,10 @@ else if (!strcmp(what, "held"))
         *got = ui.lib_cur;
     else if (!strncmp(what, "slot", 4))   /* slotN: how many notes library entry N holds */
         *got = slots.s[atoi(what + 4) % NSLOTS].n;
+    else if (!strcmp(what, "minen"))
+        *got = set.mine_n;
+    else if (!strcmp(what, "path"))
+        *got = set.chords[2];
     else if (!strcmp(what, "chordroot"))
         *got = ms_vis.chord_root;
     else if (!strcmp(what, "chordkind"))

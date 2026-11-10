@@ -1,0 +1,28 @@
+# the CHORDS page's keys play a progression into PATH MINE: each tap's chord is heard soon; a pause starts anew
+wait 600
+tap GLO
+tap GLO
+wait 50
+expect page 10
+tapkey 7
+wait 1500
+expect path 6
+expect minen 1
+expect chordroot 0
+tapkey 4
+wait 1500
+expect chordroot 9
+tapkey 12
+wait 1500
+expect chordroot 5
+tapkey 2
+wait 1500
+expect chordroot 7
+expect minen 4
+expect loop 0
+shot mine.png
+wait 5000
+tapkey 4
+wait 1500
+expect minen 1
+expect chordroot 9

@@ -56,7 +56,8 @@ void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 s
 void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */
 void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spread, 0..100 */
 /* CHORDS: 0 chord (0 AUTO, 1..7 the degree to stay on), 1 change (STILL, SLOW, NORMAL, OFTEN), 2 path (SCENE,
- * CIRCLE, DREAM, MOODY, SONG, DRONE), 3 color (LUSH, PLAIN, SUS, OPEN) */
+ * CIRCLE, DREAM, MOODY, SONG, DRONE, MINE), 3 color (LUSH, PLAIN, SUS, OPEN); 4 MINE's chords, n << 12 | four
+ * degrees 0..6 of 3 bits each */
 void ms_chords(int i, int v);
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */

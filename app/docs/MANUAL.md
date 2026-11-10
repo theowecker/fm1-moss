@@ -242,8 +242,14 @@ playing.
 | --- | --- |
 | CHORD | AUTO lets the scene choose. Turn it to I to VII and the music moves to that chord of the key, then stays there. In C major, IV is F and VI is A minor. Playing doesn't move a chord you picked |
 | CHANGE | How often the chords move by themselves: STILL (they don't), SLOW, NORMAL or OFTEN |
-| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV |
+| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. MINE is your own, played on the keys (below) |
 | COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a 2nd in place of the 3rd, airy |
+
+**Your own progression**: on this page the keys pick chords instead of playing notes. Tap up to four keys in a
+row: each one is the chord built on that note of the key (a note outside the key counts as the one below it), and the
+music moves to it so you hear it. PATH turns to MINE and plays them in turn, CHANGE setting how long each lasts. Pause
+for a few seconds and the next tap starts a new progression. In C major, tapping C, A, F and G plays I vi IV V. It is
+kept with your settings, so turning PATH away and back to MINE finds it again.
 
 LOFI changes chord on the next bar, so it stays in time with the beat. SCAPES and DRIFT drift into it within a second.
 

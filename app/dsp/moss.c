@@ -301,7 +301,9 @@ static struct {
  * SUS, OPEN */
 static struct {
     int lock, rate, path, color;
-} hc = {-1, 2, 0, 0};
+    int8_t mine[4];                    /* PATH MINE: the player's own progression, mine_n chords */
+    int mine_n;
+} hc = {-1, 2, 0, 0, {0, 3, 4, 0}, 1};
 static const int8_t PATHS[5][4] = {
     {5, 1, 4, 0},                      /* CIRCLE: vi ii V I */
     {0, 5, 3, 4},                      /* DREAM: I vi IV V */
@@ -352,13 +354,15 @@ static void chord_set(int degree)
 static int chord_next(const int8_t *prog, int peek)
 {
     static const int8_t MOVE[] = {3, 4, -3, 2, 5, -2, 3, 4};   /* mostly fourths and fifths, sometimes thirds */
-    int i = (hm.prog_i + 1) & 3;
+    int i = hc.path == 6 ? (hm.prog_i + 1) % hc.mine_n : (hm.prog_i + 1) & 3;
     if (hc.lock >= 0)
         return hc.lock;
     if (!peek && hm.pending >= 0)
         return hm.pending;
     if (!peek)
         hm.prog_i = i;
+    if (hc.path == 6)
+        return hc.mine[i];
     if (hc.path > 0)
         return PATHS[hc.path - 1][i];
     return prog ? prog[i] : hm.degree + MOVE[irand(8)];
@@ -1416,9 +1420,10 @@ static void lofi_step(void)
         int bars = hc.rate == 3 ? (ls->bars_per_chord > 1 ? ls->bars_per_chord / 2 : 1)
                  : hc.rate == 1 ? ls->bars_per_chord * 2 : ls->bars_per_chord;
         ++hm.bar_in_chord;
-        if ((hc.rate && hm.bar_in_chord >= bars) || (hc.lock >= 0 && hc.lock != hm.degree)) {
+        if ((hc.rate && hm.bar_in_chord >= bars) || (hc.lock >= 0 && hc.lock != hm.degree) || hm.pending >= 0) {
             hm.bar_in_chord = 0;
             chord_set(chord_next(ls->prog, 0));
+            hm.pending = -1;
         }
         if (hm.bar_in_chord == 0) {
             lofi_chord_hit(ls->pad > 0.0f ? 0.6f : 0.75f, 4, (int32_t)(sixteenth * (float)(10 * ls->bars_per_chord)));
@@ -1810,7 +1815,8 @@ static void mode_start(void)
         ms_vis.drums[1] = LOFI_STYLE[st.scene].snare;
         ms_vis.drums[2] = LOFI_STYLE[st.scene].hat;
         hm.prog_i = 0;
-        chord_set(hc.lock >= 0 ? hc.lock : hc.path > 0 ? PATHS[hc.path - 1][0] : LOFI_STYLE[st.scene].prog[0]);
+        chord_set(hc.lock >= 0 ? hc.lock : hc.path == 6 ? hc.mine[0] : hc.path > 0 ? PATHS[hc.path - 1][0]
+                  : LOFI_STYLE[st.scene].prog[0]);
         break;
     case MODE_SCAPES:
         crickets_init(SCAPE_STYLE[st.scene].crickets);
@@ -1824,7 +1830,7 @@ static void mode_start(void)
         break;
     case MODE_DRIFT:
         hm.prog_i = 0;
-        chord_set(hc.lock >= 0 ? hc.lock : hc.path > 0 ? PATHS[hc.path - 1][0] : 0);
+        chord_set(hc.lock >= 0 ? hc.lock : hc.path == 6 ? hc.mine[0] : hc.path > 0 ? PATHS[hc.path - 1][0] : 0);
         drift_regrow();
         if (bt.bass == BASS_AUTO)
             bass_note(36 + st.root % 12, 0.8f, -1, 1.6f, 3.0f);
@@ -2755,7 +2761,18 @@ static void drain(void)
                 else if (st.mode != MODE_LOFI && !hc.rate)
                     seq.chord_t = 1e9f;
             } else if (c.a == 2) {
-                hc.path = clamp(c.b, 0, 5);
+                hc.path = clamp(c.b, 0, 6);
+            } else if (c.a == 4) {       /* MINE: n << 12 | four degrees of 3 bits; the newest is heard soon */
+                int n = clamp(c.b >> 12 & 7, 1, 4), j;
+                for (j = 0; j < 4; j++)
+                    hc.mine[j] = (int8_t)clamp(c.b >> (3 * j) & 7, 0, 6);
+                hc.mine_n = n;
+                if (hc.path == 6 && hc.lock < 0) {
+                    hm.prog_i = n - 1;
+                    hm.pending = hc.mine[n - 1];
+                    if (st.mode != MODE_LOFI)
+                        seq.chord_t = fm_minf(seq.chord_t, 0.3f + 0.3f * frand());
+                }
             } else {
                 hc.color = clamp(c.b, 0, 3);
                 chord_set(hm.degree);
