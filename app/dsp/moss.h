@@ -56,11 +56,17 @@ void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 s
 void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */
 void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spread, 0..100 */
 /* CHORDS: 0 chord (0 AUTO, 1..7 the degree to stay on), 1 change (STILL, SLOW, NORMAL, OFTEN), 2 path (SCENE,
- * CIRCLE, DREAM, MOODY, SONG, DRONE, MINE), 3 color (LUSH, PLAIN, SUS, OPEN); 4 MINE's chords, n << 12 | four
- * degrees 0..6 of 3 bits each */
+ * CIRCLE, DREAM, MOODY, SONG, DRONE, MINE, BUILT), 3 color (LUSH, PLAIN, SUS, OPEN); 4 MINE's chords, n << 12 | four
+ * degrees 0..6 of 3 bits each; 5 one BUILT chord, slot << 11 | length << 9 | kind << 4 | root pitch class (length
+ * 0..3: half, 1, 2, 4 times the scene's chord); 6 BUILT's chord count 1..MS_NBUILT | (the slot to hear soon + 1)
+ * << 4 | (the slot removed + 1) << 8, sent before the slots that moved; PLAY's live chords: 7 type (0 the key's
+ * own chord on the note, else MS_CHORD_* + 1), 8 voicing (CLOSE, OPEN, WIDE, SMOOTH), 9 strum 0..100, 10 follow 0 or 1
+ * (the music moves to the chord played) */
 void ms_chords(int i, int v);
+void ms_chord_note(int note, int vel);   /* PLAY: a key's whole chord, vel 0 lets it go */
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */
+#define MS_NBUILT 8                    /* chords in a BUILT progression */
 #define MS_NLAYERS 8
 /* loop layer 0..MS_NLAYERS - 1: v 0..100 its level, -1 mute, -3 unmute, -2 clear, -4/-5 shift later/earlier,
  * -6 the next phrase replaces it (REDO), -7 not */
@@ -102,6 +108,9 @@ typedef struct {
     volatile uint32_t chord_mask;      /* the chord's pitch classes, bit 0 = C */
     volatile int8_t chord_root;        /* pitch class, -1 none */
     volatile uint8_t chord_kind;       /* MS_CHORD_* */
+    volatile int8_t chord_slot;        /* the BUILT chord playing, -1 none */
+    volatile int8_t live_root;         /* PLAY: the last chord played, pitch class, -1 none */
+    volatile uint8_t live_kind;        /* its MS_CHORD_* */
     volatile uint8_t playing, frozen;
     volatile float level;              /* slow output peak 0..1 */
     volatile float tape_ph;            /* reel rotation, turns */
@@ -135,5 +144,6 @@ typedef struct {
 extern ms_vis_t ms_vis;
 
 enum { MS_CHORD_MAJ7, MS_CHORD_MIN7, MS_CHORD_DOM7, MS_CHORD_HALFDIM, MS_CHORD_MAJ, MS_CHORD_MIN, MS_CHORD_SUS,
-       MS_CHORD_SUS2, MS_CHORD_DIM };
+       MS_CHORD_SUS2, MS_CHORD_DIM, MS_CHORD_6, MS_CHORD_MIN6, MS_CHORD_9, MS_CHORD_MIN9, MS_CHORD_MAJ9, MS_CHORD_ADD9,
+       MS_CHORD_7SUS, MS_CHORD_DIM7, MS_CHORD_AUG, MS_CHORD_7B5, MS_NCHORDS };
 extern const char *const MS_CHORD_SUFFIX[];

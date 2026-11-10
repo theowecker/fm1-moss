@@ -1,4 +1,5 @@
-# DELETE: turning right only arms it, however fast or far; REC deletes. Turning left, waiting or a page change lets go
+# DELETE: turning right only arms it, however fast or far; REC deletes. Turning left, waiting or a page change lets go;
+# a REC just after it lapses does nothing
 wait 600
 tapkey 7
 wait 300
@@ -15,7 +16,12 @@ expect page 9
 turn K4 25 10
 wait 50
 expect slot0 2
-wait 3500
+wait 6500
+tap REC
+wait 50
+expect slot0 2
+expect loop 2
+wait 2100
 tap REC
 wait 50
 expect slot0 2

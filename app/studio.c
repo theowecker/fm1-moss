@@ -215,9 +215,14 @@ static void studio_knobs(void)
     rgb_t acc = MODE_ACCENT[set.mode];
     fill(6, 172, 228, 1, ST_LINE);
     cv_text(8, 176, &FONT_T, PAGE_NAME[set.page], ST_SOFT);
-    if (set.view != VIEW_LOOPS)
+    if (!own_view(set.view)) {           /* a dot for each page SELECT reaches here */
+        int32_t n = 0, k = 0;
         for (i = 0; i < NPAGES; i++)
-            disc(232 - (NPAGES - 1 - i) * 7, 182, 2, i == set.page ? c565(acc) : ST_DIM);
+            n += page_view(i) < 0;
+        for (i = 0; i < NPAGES; i++)
+            if (page_view(i) < 0)
+                disc(232 - (n - 1 - k++) * 7, 182, 2, i == set.page ? c565(acc) : ST_DIM);
+    }
     if (set.sleep && ui.sleep_start) {
         uint32_t left = SLEEP_MIN[set.sleep] * 60000u - (plat_ms() - ui.sleep_start);
         int_text((int32_t)(left / 60000u + 1u), t);
@@ -429,6 +434,176 @@ static void loops_view(uint32_t now)
     centred(156, &FONT_T, TIP[set.page - PG_LOOP][1], ST_SOFT);
 }
 
+/* the CHORDS screen: SIMPLE, BUILD and PLAY as tabs. SIMPLE shows the chord playing and the path, BUILD the
+ * progression, PLAY the chord the keys last played */
+static void chords_tabs(rgb_t acc)
+{
+    static const char *const TAB[3] = {"SIMPLE", "BUILD", "PLAY"};
+    int32_t i;
+    for (i = 0; i < 3; i++) {
+        int32_t cx = 40 + i * 80, w = text_w(&FONT_T, TAB[i]);
+        int on = set.page == PG_CHORDS + i;
+        if (on)
+            pill(cx - w / 2 - 6, 40, w + 12, 14, c565(acc));
+        cv_text(cx - w / 2, 41, &FONT_T, TAB[i], on ? ST_BG : ST_DIM);
+    }
+}
+
+/* MINE's chords by name, the one playing lit */
+static void mine_row(int32_t y, rgb_t acc)
+{
+    char t[MS_NBUILT][12];
+    int32_t i, w = 0, x;
+    for (i = 0; i < set.mine_n; i++) {
+        t[i][0] = 0;
+        degree_name(set.mine[i], t[i]);
+        w += text_w(&FONT_T, t[i]) + (i ? 10 : 0);
+    }
+    x = 120 - w / 2;
+    for (i = 0; i < set.mine_n; i++) {
+        int lit = !set.chords[0] && degree_pc(set.mine[i]) == ms_vis.chord_root;
+        cv_text(x, y, &FONT_T, t[i], lit ? c565(acc) : ST_TEXT);
+        x += text_w(&FONT_T, t[i]) + 10;
+    }
+}
+
+static void simple_view(void)
+{
+    rgb_t acc = MODE_ACCENT[set.mode];
+    char t[40];
+    t[0] = 0;
+    if (ms_vis.chord_root >= 0) {
+        text_cat(t, MS_NOTE_NAME[ms_vis.chord_root]);
+        text_cat(t, MS_CHORD_SUFFIX[ms_vis.chord_kind]);
+    }
+    centred(62, &FONT_B, t, c565(acc));
+    t[0] = 0;
+    if (set.chords[0]) {
+        text_cat(t, "HELD ON ");
+        text_cat(t, ROMAN[set.chords[0] - 1]);
+        text_cat(t, ". CHORD TO AUTO TO MOVE");
+    } else {
+        text_cat(t, "PATH ");
+        text_cat(t, PATH_NAME[set.chords[2]]);
+        text_cat(t, ", ");
+        text_cat(t, CHANGE_NAME[set.chords[1]]);
+        text_cat(t, ", ");
+        text_cat(t, COLOR_NAME[set.chords[3]]);
+    }
+    centred(88, &FONT_T, t, ST_TEXT);
+    if (set.chords[2] == PATH_MINE)
+        mine_row(104, acc);
+    else if (set.chords[2] == PATH_BUILT)
+        centred(104, &FONT_T, "YOUR BUILD PAGE CHORDS", ST_SOFT);
+    if (ui.mine_t && plat_ms() - ui.mine_t < BUILD_WAIT && set.mine_n < 4) {
+        t[0] = 0;
+        text_cat(t, "TAP ");
+        int_text(set.mine_n + 1, t + 4);
+        text_cat(t, " OF 4, OR WAIT TO KEEP THESE");
+        centred(140, &FONT_T, t, ST_TEXT);
+    } else {
+        centred(140, &FONT_T, "KEYS: YOUR OWN PROGRESSION, UP TO 4", ST_SOFT);
+    }
+    centred(152, &FONT_T, "SADDER OR BRIGHTER: MOOD ON SETUP", ST_SOFT);
+}
+
+static void play_view(void)
+{
+    rgb_t acc = MODE_ACCENT[set.mode];
+    char t[40];
+    t[0] = 0;
+    if (ms_vis.live_root >= 0 && ui.play_shown) {
+        text_cat(t, MS_NOTE_NAME[ms_vis.live_root]);
+        text_cat(t, MS_CHORD_SUFFIX[ms_vis.live_kind]);
+        centred(62, &FONT_B, t, c565(acc));
+    } else {
+        centred(66, &FONT_T, "PLAY A KEY", ST_SOFT);
+    }
+    t[0] = 0;
+    if (set.play[0]) {
+        int kind = KIND_ORDER[set.play[0] - 1];
+        text_cat(t, "EVERY KEY PLAYS ");
+        text_cat(t, kind == MS_CHORD_MAJ ? "maj" : MS_CHORD_SUFFIX[kind]);
+    } else {
+        text_cat(t, "EACH KEY PLAYS THE KEY'S CHORD ON IT");
+    }
+    centred(88, &FONT_T, t, ST_TEXT);
+    t[0] = 0;
+    text_cat(t, VOICING_NAME[set.play[1]]);
+    text_cat(t, set.play[2] ? ", STRUMMED" : ", ALL AT ONCE");
+    centred(102, &FONT_T, t, ST_SOFT);
+    centred(140, &FONT_T, set.play[3] ? "THE MUSIC FOLLOWS YOUR CHORDS" : "THE MUSIC KEEPS ITS OWN CHORDS", ST_SOFT);
+    centred(152, &FONT_T, set.keys[3] == 1 ? "LISTEN IS ON: THEY GO INTO THE LOOP" : "LOOPED ONLY WHILE REC RECORDS",
+            ST_SOFT);
+}
+
+/* the BUILD page: the progression as two rows of chords, the one chosen ringed, the one playing lit */
+static void build_view(uint32_t now)
+{
+    rgb_t acc = MODE_ACCENT[set.mode];
+    int32_t i;
+    int on = set.chords[2] == PATH_BUILT && !set.chords[0];
+    char t[40];
+    t[0] = 0;
+    if (set.chords[0]) {
+        text_cat(t, "HELD BY SIMPLE'S CHORD: EDIT TO PLAY");
+    } else if (on && ms_vis.chord_slot < 0) {
+        text_cat(t, ms_vis.live_root >= 0 && set.play[3] ? "FOLLOWING WHAT YOU PLAY" : "STARTING");
+    } else if (on) {
+        text_cat(t, "PLAYING ");
+        int_text(ms_vis.chord_slot + 1, t + 8);
+        text_cat(t, " OF ");
+        int_text(set.b_n, t + text_len(t));
+    } else {
+        text_cat(t, "NOT PLAYING: EDIT ONE TO START");
+    }
+    if (!on || now / 600u & 1u)
+        disc(12, 64, 3, on ? c565(acc) : ST_DIM);
+    cv_text(22, 58, &FONT_T, t, on ? ST_TEXT : ST_SOFT);
+    for (i = 0; i < MS_NBUILT; i++) {
+        int32_t x = 4 + (i % 4) * 59, y = 74 + (i / 4) * 34, w;
+        int playing = on && ms_vis.chord_slot == i;
+        uint16_t c = playing ? c565(acc) : ST_TEXT;
+        if (i > set.b_n || (i == set.b_n && i != ui.sel_chord))
+            continue;
+        if (i == ui.sel_chord)
+            pill(x, y, 56, 30, ST_LINE);
+        if (i == set.b_n) {
+            cv_text(x + 28 - text_w(&FONT_T, "+") / 2, y + 9, &FONT_T, "+", ST_SOFT);
+            continue;
+        }
+        if (playing)
+            fill(x + 6, y + 27, 44, 2, c565(acc));
+        chord_name(i, t);
+        w = text_w(&FONT_T, t);
+        cv_text(x + 28 - w / 2, y + 4, &FONT_T, t, c);
+        if (set.b_len[i] != 1) {
+            w = text_w(&FONT_T, LEN_NAME[set.b_len[i]]);
+            cv_text(x + 28 - w / 2, y + 16, &FONT_T, LEN_NAME[set.b_len[i]], ST_SOFT);
+        }
+    }
+    if (ui.build_t && now - ui.build_t < BUILD_WAIT && ui.sel_chord + 1 < MS_NBUILT) {
+        t[0] = 0;
+        text_cat(t, "NEXT KEY: CHORD ");
+        int_text(ui.sel_chord + 2, t + text_len(t));
+        centred(146, &FONT_T, t, ST_TEXT);
+    } else {
+        centred(146, &FONT_T, "TAP A KEY TO CHANGE THIS CHORD", ST_SOFT);
+    }
+    centred(158, &FONT_T, "REMOVE: TURN LENGTH FULLY LEFT, PRESS REC", ST_SOFT);
+}
+
+static void chords_view(uint32_t now)
+{
+    chords_tabs(MODE_ACCENT[set.mode]);
+    if (set.page == PG_BUILD)
+        build_view(now);
+    else if (set.page == PG_PLAY)
+        play_view();
+    else
+        simple_view();
+}
+
 static void studio_draw(uint32_t now)
 {
     int half;
@@ -438,6 +613,8 @@ static void studio_draw(uint32_t now)
         studio_header(now);
         if (set.view == VIEW_LOOPS) {
             loops_view(now);
+        } else if (set.view == VIEW_CHORDS) {
+            chords_view(now);
         } else {
             studio_meters(now);
             studio_wheel(now);

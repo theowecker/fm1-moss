@@ -1,0 +1,27 @@
+# BUILD: a run of keys from chord 1 that stops short ends the progression there; an edit between taps keeps the run
+# going; an armed REMOVE that lapses says so, and a REC just after does nothing
+wait 600
+tap SEQ
+tap SEQ
+tap SEQ
+turn SELECT 1
+wait 50
+expect page 11
+expect built 4
+tapkey 7
+wait 3000
+turn K3 1
+wait 4000
+tapkey 4
+wait 1000
+tapkey 12
+wait 7000
+expect built 3
+expect loop 0
+turn K4 -1
+turn K4 -1
+wait 6500
+tap REC
+wait 1200
+expect built 3
+expect loop 0

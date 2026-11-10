@@ -1,0 +1,89 @@
+# the CHORDS screen's BUILD page: keys set a chord's root and a tap soon after goes on to the next, TYPE colours the
+# chord just tapped, K1 walks the chords and one past the last adds one, LENGTH left past 1/2x arms REMOVE for REC
+wait 600
+expect view 0
+tap SEQ
+tap SEQ
+tap SEQ
+wait 50
+expect view 3
+expect page 10
+turn SELECT 1
+wait 50
+expect page 11
+expect built 4
+tapkey 7
+wait 1500
+expect path 7
+expect chordslot 0
+expect chordroot 0
+expect chordkind 0
+tapkey 10
+wait 1500
+expect chordslot 1
+expect chordroot 3
+expect chordkind 4
+spin K3 30
+wait 1500
+expect chordkind 17
+turn K3 -1
+turn K3 -1
+turn K3 -1
+wait 1500
+expect chordkind 16
+expect chordslot 1
+wav build.wav
+wait 4000
+wavstop
+expect peak_db_min -30
+shot build.png
+turn K1 1
+wait 4100
+tapkey 12
+wait 1500
+expect chordslot 2
+expect chordroot 5
+turn K4 -1
+turn K4 -1
+tap REC
+wait 100
+expect built 3
+expect loop 0
+turn K1 5
+tapkey 9
+wait 1500
+expect built 4
+expect chordslot 3
+expect chordroot 2
+expect chordkind 1
+turn SELECT -1
+wait 50
+expect page 10
+shot simple.png
+tap SEQ
+wait 50
+expect view 0
+expect page 0
+# removing a chord before the one playing keeps that one playing, in its new place
+tap SEQ
+tap SEQ
+tap SEQ
+turn SELECT 1
+wait 50
+expect page 11
+turn K1 -8
+tapkey 7
+wait 1500
+tapkey 9
+wait 1500
+expect chordslot 1
+expect chordroot 2
+turn K1 -1
+turn K4 -1
+turn K4 -1
+turn K4 -1
+tap REC
+wait 100
+expect built 3
+expect chordslot 0
+expect chordroot 2

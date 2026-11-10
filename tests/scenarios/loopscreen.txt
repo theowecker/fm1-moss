@@ -1,11 +1,11 @@
-# SELECT elsewhere goes round the loop pages; the LOOPS screen: only the loop pages, SELECT turns through them, a layer turned down past OFF is cleared
+# SELECT elsewhere goes round the loop and chord pages; the LOOPS screen: only the loop pages, SELECT turns through them, a layer turned down past OFF is cleared
 wait 600
 tap ENV
 wait 50
 expect page 5
 turn SELECT 1
 wait 50
-expect page 10
+expect page 13
 expect view 0
 turn SELECT -1
 wait 50
@@ -93,6 +93,10 @@ tap LFO
 wait 50
 expect view 2
 expect page 6
+tap SEQ
+wait 50
+expect view 3
+expect page 10
 tap SEQ
 wait 50
 expect view 0

@@ -13,7 +13,8 @@
 const char *const MS_MODE_NAME[MS_NMODES] = {"LOFI", "SCAPES", "DRIFT"};
 const char *const MS_MOOD_NAME[MS_NMOODS] = {"MAJOR", "MINOR", "DORIAN", "LYDIAN", "MIXOLYD"};
 const char *const MS_NOTE_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
-const char *const MS_CHORD_SUFFIX[] = {"maj7", "m7", "7", "m7b5", "", "m", "sus", "sus2", "dim"};
+const char *const MS_CHORD_SUFFIX[MS_NCHORDS] = {"maj7", "m7", "7", "m7b5", "", "m", "sus4", "sus2", "dim", "6", "m6", "9", "m9",
+                                                "maj9", "add9", "7sus4", "dim7", "aug", "7b5"};
 const char *const MS_MACRO_NAME[MS_NMODES][MS_NMACRO] = {
     {"TONE", "DUST", "WOBBLE", "REVERB"},
     {"WEATHER", "LIFE", "TONE", "REVERB"},
@@ -217,7 +218,7 @@ static void pan_gains(float pan, float *l, float *r)   /* equal power, pan -1..1
 }
 
 enum { C_MODE, C_MACRO, C_MIX, C_TEMPO, C_ROOT, C_MOOD, C_PLAY, C_FREEZE, C_NEW, C_NOTE, C_PANIC, C_SEED, C_SHED, C_KEYSET,
-       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION, C_CHORDS };
+       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION, C_CHORDS, C_CHORDNOTE };
 typedef struct {
     uint8_t type;
     int16_t a, b;
@@ -291,10 +292,14 @@ static struct {
 } k;
 
 static struct {
-    int degree;                        /* 0..6 */
-    int pending;                       /* degree requested by the player's notes, -1 none */
+    int degree;                        /* 0..6: of the key, or for a BUILT chord its root's place in hm.scale */
+    int pending;                       /* chord id asked for by the player's notes or a new chord, -1 none */
     int prog_i, bar_in_chord;
     int tones[5];                      /* semitones above the key root: root, 3rd, 5th, 7th, 9th */
+    int slot;                          /* the BUILT chord playing, -1 a chord of the key */
+    int live;                          /* the chord playing is the one PLAY played */
+    uint8_t scale[7];                  /* the scale the music plays now, semitones above the key root, rising */
+    uint16_t scale_mask;               /* the same as pitch classes */
 } hm;
 
 /* CHORDS: the player's say over the harmony. lock: -1 the scene picks, else the degree it stays on; rate: how often
@@ -304,7 +309,21 @@ static struct {
     int lock, rate, path, color;
     int8_t mine[4];                    /* PATH MINE: the player's own progression, mine_n chords */
     int mine_n;
-} hc = {-1, 2, 0, 0, {0, 3, 4, 0}, 1};
+    uint8_t b_root[MS_NBUILT], b_kind[MS_NBUILT], b_len[MS_NBUILT];   /* PATH BUILT: any chord, of any length */
+    int b_n;
+} hc = {-1, 2, 0, 0, {0, 3, 4, 0}, 1, {0}, {MS_CHORD_MAJ7}, {1}, 1};
+enum { PATH_MINE = 6, PATH_BUILT = 7 };
+/* chord ids: 0..6 a degree of the key, CH_BUILT + slot a BUILT chord, CH_LIVE the last chord PLAY played */
+#define CH_BUILT 16
+#define CH_LIVE (CH_BUILT + MS_NBUILT)
+/* each kind's root, 3rd, 5th, 7th and 9th roles, as the scenes voice them; a triad doubles its root and 5th */
+static const int8_t KIND_TONES[MS_NCHORDS][5] = {
+    {0, 4, 7, 11, 14}, {0, 3, 7, 10, 14}, {0, 4, 7, 10, 19}, {0, 3, 6, 10, 12}, {0, 4, 7, 12, 19}, {0, 3, 7, 12, 19},
+    {0, 5, 7, 12, 19}, {0, 2, 7, 12, 19}, {0, 3, 6, 12, 18}, {0, 4, 7, 9, 14}, {0, 3, 7, 9, 14}, {0, 4, 7, 10, 14},
+    {0, 3, 7, 10, 14}, {0, 4, 7, 11, 14}, {0, 4, 7, 14, 12}, {0, 5, 7, 10, 14}, {0, 3, 6, 9, 12}, {0, 4, 8, 12, 16},
+    {0, 4, 6, 10, 14},
+};
+static const float LEN_MUL[4] = {0.5f, 1.0f, 2.0f, 4.0f};
 static const int8_t PATHS[5][4] = {
     {5, 1, 4, 0},                      /* CIRCLE: vi ii V I */
     {0, 5, 3, 4},                      /* DREAM: I vi IV V */
@@ -317,13 +336,91 @@ static const float RATE_MUL[4] = {0.0f, 2.0f, 1.0f, 0.5f};   /* times the scene'
 static int deg_semis(int deg)   /* any octave, including negative degrees */
 {
     int oct = deg >= 0 ? deg / 7 : -((6 - deg) / 7);
-    return SCALE[st.mood][deg - oct * 7] + 12 * oct;
+    return hm.scale[deg - oct * 7] + 12 * oct;
 }
+
+static void scale_from(uint16_t mask)
+{
+    int o, n = 0;
+    hm.scale_mask = mask;
+    for (o = 0; o < 12 && n < 7; o++)
+        if (mask >> ((st.root + o) % 12) & 1u)
+            hm.scale[n++] = (uint8_t)o;
+}
+
+/* a BUILT chord: its tones, and the key bent just enough to hold them, so the melodies, the snapped keys and
+ * HARMONY follow it. Each tone the key lacks takes the place of the nearest neighbour not in the chord, the one above
+ * first: a note a semitone above a chord tone is the one that grates */
+static void chord_any(int root_pc, int kind, int slot)
+{
+    int i, r = (root_pc - st.root + 12) % 12;
+    uint16_t key = ms_scale_mask(st.mood, st.root), tones = 0;
+    uint32_t mask = 0;
+    hm.slot = slot;
+    hm.live = slot < 0;
+    for (i = 0; i < 5; i++) {
+        hm.tones[i] = r + KIND_TONES[kind][i];
+        tones |= (uint16_t)(1u << ((st.root + hm.tones[i]) % 12));
+    }
+    for (i = 0; i < 12; i++) {
+        int d;
+        if (!(tones >> i & 1u) || key >> i & 1u)
+            continue;
+        for (d = 1; d < 6; d++) {
+            int lo = (i + 12 - d) % 12, hi = (i + d) % 12;
+            if (key >> hi & 1u && !(tones >> hi & 1u)) {
+                key &= (uint16_t)~(1u << hi);
+                break;
+            }
+            if (key >> lo & 1u && !(tones >> lo & 1u)) {
+                key &= (uint16_t)~(1u << lo);
+                break;
+            }
+        }
+        key |= (uint16_t)(1u << i);
+    }
+    scale_from(key);
+    for (i = 0; i < 7; i++)
+        if (hm.scale[i] == r)
+            hm.degree = i;
+    for (i = 0; i < 4; i++)
+        mask |= 1u << ((st.root + hm.tones[i]) % 12);
+    ms_vis.chord_kind = (uint8_t)kind;
+    ms_vis.chord_mask = mask;
+    ms_vis.chord_root = (int8_t)root_pc;
+    ms_vis.chord_slot = (int8_t)slot;
+}
+
+static int chord_id(void) { return hm.live ? CH_LIVE : hm.slot >= 0 ? CH_BUILT + hm.slot : hm.degree; }
+
+/* PLAY: the live chords. Each key held has its chord's notes, started one by one when STRUM spreads them */
+#define NLIVE 4
+static struct {
+    int type, voicing, follow;
+    float strum;
+    int root, kind;                    /* the last chord played, for FOLLOW */
+    float centre;                      /* where SMOOTH keeps the voices */
+    int8_t key[NLIVE], note[NLIVE][6], n[NLIVE], started[NLIVE];
+    float wait[NLIVE], vel[NLIVE];
+} cp;
 
 static void chord_set(int degree)
 {
     int i, third, fifth, seventh;
     uint32_t mask = 0;
+    if (degree == CH_LIVE) {
+        chord_any(cp.root, cp.kind, -1);
+        return;
+    }
+    if (degree >= CH_BUILT) {
+        int j = (degree - CH_BUILT) % hc.b_n;
+        chord_any(hc.b_root[j], hc.b_kind[j], j);
+        return;
+    }
+    hm.slot = -1;
+    hm.live = 0;
+    ms_vis.chord_slot = -1;
+    scale_from(ms_scale_mask(st.mood, st.root));
     hm.degree = ((degree % 7) + 7) % 7;
     for (i = 0; i < 5; i++)
         hm.tones[i] = deg_semis(hm.degree + 2 * i);
@@ -353,20 +450,23 @@ static void chord_set(int degree)
     ms_vis.chord_root = (int8_t)((st.root + hm.tones[0]) % 12);
 }
 
-/* the degree the progression goes to next, from the scene's own (prog, NULL for DRIFT's wandering) or CHORDS' */
+/* the chord id the progression goes to next, from the scene's own (prog, NULL for DRIFT's wandering) or CHORDS' */
 static int chord_next(const int8_t *prog, int peek)
 {
     static const int8_t MOVE[] = {3, 4, -3, 2, 5, -2, 3, 4};   /* mostly fourths and fifths, sometimes thirds */
-    int i = hc.path == 6 ? (hm.prog_i + 1) % hc.mine_n : (hm.prog_i + 1) & 3;
+    int i = hc.path == PATH_MINE ? (hm.prog_i + 1) % hc.mine_n
+          : hc.path == PATH_BUILT ? (hm.prog_i + 1) % hc.b_n : (hm.prog_i + 1) & 3;
     if (hc.lock >= 0)
         return hc.lock;
     if (!peek && hm.pending >= 0)
         return hm.pending;
     if (!hc.rate)                        /* STILL: the chord comes round again unchanged */
-        return hm.degree;
+        return chord_id();
     if (!peek)
         hm.prog_i = i;
-    if (hc.path == 6)
+    if (hc.path == PATH_BUILT)
+        return CH_BUILT + i;
+    if (hc.path == PATH_MINE)
         return hc.mine[i];
     if (hc.path > 0)
         return PATHS[hc.path - 1][i];
@@ -374,7 +474,22 @@ static int chord_next(const int8_t *prog, int peek)
 }
 
 /* how long until the next chord, from the scene's own length: CHANGE's STILL waits until CHORD asks for one */
-static float chord_wait(float secs) { return hc.rate == 0 ? 1e9f : secs * RATE_MUL[hc.rate]; }
+static float chord_len(void) { return hm.slot >= 0 && !hm.live ? LEN_MUL[hc.b_len[hm.slot]] : 1.0f; }
+static float chord_wait(float secs) { return hc.rate == 0 ? 1e9f : secs * RATE_MUL[hc.rate] * chord_len(); }
+
+/* the first chord a scene starts on */
+static int chord_first(int scene_first)
+{
+    return hc.lock >= 0 ? hc.lock : hc.path == PATH_BUILT ? CH_BUILT : hc.path == PATH_MINE ? hc.mine[0]
+         : hc.path > 0 ? PATHS[hc.path - 1][0] : scene_first;
+}
+
+/* the root of chord id, semitones above the key root */
+static int chord_root_semis(int id)
+{
+    int pc = id == CH_LIVE ? cp.root : id >= CH_BUILT ? hc.b_root[(id - CH_BUILT) % hc.b_n] : -1;
+    return pc >= 0 ? (pc - st.root + 12) % 12 : SCALE[st.mood][((id % 7) + 7) % 7];
+}
 
 static int chord_note_near(int i, int centre)
 {
@@ -1416,10 +1531,10 @@ static void lofi_step(void)
     int32_t hum = (int32_t)(frand() * 0.006f * MS_SR);
     int next_root, n;
     if (s == 0) {
-        int bars = hc.rate == 3 ? (ls->bars_per_chord > 1 ? ls->bars_per_chord / 2 : 1)
-                 : hc.rate == 1 ? ls->bars_per_chord * 2 : ls->bars_per_chord;
+        int bars = (int)((float)ls->bars_per_chord * RATE_MUL[hc.rate ? hc.rate : 2] * chord_len() + 0.5f);
+        bars = bars < 1 ? 1 : bars;
         ++hm.bar_in_chord;
-        if (hm.bar_in_chord >= bars || (hc.lock >= 0 && hc.lock != hm.degree) || hm.pending >= 0) {
+        if (hm.bar_in_chord >= bars || (hc.lock >= 0 && hc.lock != chord_id()) || hm.pending >= 0) {
             hm.bar_in_chord = 0;
             chord_set(chord_next(ls->prog, 0));
             hm.pending = -1;
@@ -1441,7 +1556,7 @@ static void lofi_step(void)
                   (int32_t)(sixteenth * 3.0f), 0.0f, 0.004f);
     if (s == 14 && bt.bass == BASS_AUTO && frand() < 0.3f) {   /* approach the next root from a semitone below */
         int nd = chord_next(ls->prog, 1);
-        next_root = (st.root + deg_semis(nd)) % 12;
+        next_root = (st.root + chord_root_semis(nd)) % 12;
         bass_note(36 + ((next_root + 11) % 12), 0.6f, (int32_t)(sixteenth * 1.6f), 0.0f, 0.004f);
     }
     if ((s & 1u) == 0 && s != 0 && frand() < ls->mel * (1.0f + 3.0f * kb.energy)) {
@@ -1806,8 +1921,7 @@ static void mode_start(void)
         ms_vis.drums[1] = LOFI_STYLE[st.scene].snare;
         ms_vis.drums[2] = LOFI_STYLE[st.scene].hat;
         hm.prog_i = 0;
-        chord_set(hc.lock >= 0 ? hc.lock : hc.path == 6 ? hc.mine[0] : hc.path > 0 ? PATHS[hc.path - 1][0]
-                  : LOFI_STYLE[st.scene].prog[0]);
+        chord_set(chord_first(LOFI_STYLE[st.scene].prog[0]));
         break;
     case MODE_SCAPES:
         crickets_init(SCAPE_STYLE[st.scene].crickets);
@@ -1817,15 +1931,14 @@ static void mode_start(void)
             bd[i].wait = (int32_t)((2.0f + 6.0f * frand()) * MS_SR);
         }
         hm.prog_i = 0;                   /* the scene's own first chord, which STILL then keeps */
-        chord_set(hc.lock >= 0 ? hc.lock : hc.path == 6 ? hc.mine[0] : hc.path > 0 ? PATHS[hc.path - 1][0]
-                  : SCAPE_STYLE[st.scene].prog[0]);
+        chord_set(chord_first(SCAPE_STYLE[st.scene].prog[0]));
         hm.prog_i = -1;                  /* so the first change plays it, not the one after */
         seq.chord_t = 0.0f;
         seq.note_acc = 3.0f;
         break;
     case MODE_DRIFT:
         hm.prog_i = 0;
-        chord_set(hc.lock >= 0 ? hc.lock : hc.path == 6 ? hc.mine[0] : hc.path > 0 ? PATHS[hc.path - 1][0] : 0);
+        chord_set(chord_first(0));
         drift_regrow();
         if (bt.bass == BASS_AUTO)
             bass_note(36 + st.root % 12, 0.8f, -1, 1.6f, 3.0f);
@@ -1913,7 +2026,7 @@ static int snap_note(int note)
     int d;
     if (kb.snap == SNAP_FREE)
         return note;
-    mask = kb.snap == SNAP_CHORD ? ms_vis.chord_mask : ms_scale_mask(st.mood, st.root);
+    mask = kb.snap == SNAP_CHORD ? ms_vis.chord_mask : hm.scale_mask;
     if (!mask)
         return note;
     for (d = 0; d < 12; d++) {
@@ -1927,7 +2040,7 @@ static int snap_note(int note)
 
 static int scale_step(int note, int dir)
 {
-    uint32_t mask = ms_scale_mask(st.mood, st.root);
+    uint32_t mask = hm.scale_mask;
     int g;
     note += dir;
     for (g = 0; g < 12 && !(mask >> ((note + 120) % 12) & 1u); g++)
@@ -2337,7 +2450,7 @@ static void plant(int note)
         seq.mel_pool[seq.mel_n++ & 3] = (int8_t)note;
         return;
     }
-    if (!(ms_vis.chord_mask >> pc & 1u) && !st.frozen && hc.lock < 0) {
+    if (!(ms_vis.chord_mask >> pc & 1u) && !st.frozen && hc.lock < 0 && hc.path != PATH_BUILT) {
         int d = degree_with(pc);
         if (d >= 0) {
             hm.pending = d;
@@ -2548,6 +2661,178 @@ void ms_note_now(int note, int vel)
     }
 }
 
+/* the chord the key has on pitch class pc, a 7th; major off the key */
+static int key_chord_kind(int pc)
+{
+    uint16_t key = ms_scale_mask(st.mood, st.root);
+    int d = 0, o = (pc - st.root + 12) % 12, third, fifth, seventh;
+    if (!(key >> pc & 1u))
+        return MS_CHORD_MAJ;
+    while (SCALE[st.mood][d] != o)
+        d++;
+    third = (SCALE[st.mood][(d + 2) % 7] - o + 12) % 12;
+    fifth = (SCALE[st.mood][(d + 4) % 7] - o + 12) % 12;
+    seventh = (SCALE[st.mood][(d + 6) % 7] - o + 12) % 12;
+    return fifth == 6 ? MS_CHORD_HALFDIM : third == 3 ? MS_CHORD_MIN7 : seventh == 11 ? MS_CHORD_MAJ7 : MS_CHORD_DOM7;
+}
+
+/* a chord's notes on root note r, as VOICING lays them: CLOSE stacked over the root; OPEN the root an octave down
+ * and the rest spread over two octaves; WIDE the root down, then the 3rd, the 7th (a triad's 5th an octave up) and
+ * the 9th or the 5th above; SMOOTH the root down and the rest moved by octaves to sit near the last chord, so
+ * chords flow into each other */
+static int live_voicing(int r, int kind, int8_t *out)
+{
+    const int8_t *t = KIND_TONES[kind];
+    int n = 0, i, tone[5], k = 0;
+    uint16_t seen = 0;
+    for (i = 0; i < 5; i++)              /* the chord's own notes, a doubled root or 5th left out */
+        if (!(seen >> (t[i] % 12) & 1u)) {
+            seen |= (uint16_t)(1u << (t[i] % 12));
+            tone[k++] = t[i];
+        }
+    switch (cp.voicing) {
+    case 0:
+        for (i = 0; i < k; i++)
+            out[n++] = (int8_t)(r + tone[i]);
+        break;
+    case 1:
+        out[n++] = (int8_t)(r - 12);
+        for (i = 1; i < k; i++)
+            out[n++] = (int8_t)(r + tone[i] + (i & 1 ? 12 : 0));
+        break;
+    case 2:
+        out[n++] = (int8_t)(r - 12);
+        out[n++] = (int8_t)(r + tone[1]);
+        out[n++] = (int8_t)(r + (k > 3 ? tone[3] : tone[2] + 12));
+        if (k > 4)
+            out[n++] = (int8_t)(r + tone[4] + (tone[4] < 12 ? 12 : 0));
+        else if (k > 3)
+            out[n++] = (int8_t)(r + tone[2] + 12);
+        break;
+    default: {
+        float sum = 0.0f;
+        out[n++] = (int8_t)(r - 12);
+        for (i = 1; i < k; i++) {
+            int x = r + tone[i];
+            while (x < cp.centre - 6.0f)
+                x += 12;
+            while (x > cp.centre + 5.0f)
+                x -= 12;
+            out[n++] = (int8_t)x;
+            sum += (float)x;
+        }
+        if (k > 1)
+            cp.centre += 0.5f * (sum / (float)(k - 1) - cp.centre) + 0.1f * (64.0f - cp.centre);
+        break;
+    }
+    }
+    for (i = 0; i < n; i++) {            /* by octaves, so every note keeps its name */
+        int x = out[i];
+        while (x < 28)
+            x += 12;
+        while (x > 100)
+            x -= 12;
+        out[i] = (int8_t)x;
+    }
+    return n;
+}
+
+static float live_gap(void) { return 0.15f * cp.strum * cp.strum + 0.01f * cp.strum; }
+
+/* another chord held has this note sounding: it stays */
+static int live_shared(int s, int note)
+{
+    int o, i;
+    for (o = 0; o < NLIVE; o++)
+        if (o != s && cp.key[o] >= 0)
+            for (i = 0; i < cp.started[o]; i++)
+                if (cp.note[o][i] == note)
+                    return 1;
+    return 0;
+}
+
+static void live_release(int s)
+{
+    int i;
+    for (i = 0; i < cp.started[s]; i++) {
+        if (live_shared(s, cp.note[s][i]))
+            continue;
+        voice_release_note(cp.note[s][i], SRC_KEYS);
+        if (loop_listening())
+            loop_close(cp.note[s][i]);
+    }
+    cp.key[s] = -1;
+}
+
+static void live_start_note(int s)
+{
+    int i = cp.started[s]++, kind = key_kind();
+    float atk = kind == V_PAD ? 0.25f : 0.004f, rel = kind == V_EP ? 0.4f : kind == V_PAD ? 2.5f : 1.5f;
+    float vel = cp.vel[s] * (i ? 0.7f : 0.85f);
+    voice_start(kind, cp.note[s][i], vel, SRC_KEYS, -1, atk, rel, (float)i / (float)cp.n[s] * 1.0f - 0.5f);
+    if (loop_listening())
+        loop_add(cp.note[s][i], vel);
+}
+
+/* a PLAY key: its whole chord, strummed upward by STRUM; with FOLLOW the music moves to it */
+static void live_chord(int note, int vel)
+{
+    int s, pc = ((note % 12) + 12) % 12;
+    for (s = 0; s < NLIVE; s++)
+        if (cp.key[s] == note)
+            live_release(s);
+    if (!vel)
+        return;
+    for (s = 0; s < NLIVE && cp.key[s] >= 0; s++)
+        ;
+    if (s == NLIVE)
+        live_release(s = 0);
+    cp.kind = cp.type ? cp.type - 1 : key_chord_kind(pc);
+    cp.root = pc;
+    ms_vis.live_root = (int8_t)pc;
+    ms_vis.live_kind = (uint8_t)cp.kind;
+    cp.key[s] = (int8_t)note;
+    {
+        int r = note;                    /* the root by octaves into a range that voices well */
+        while (r < 36)
+            r += 12;
+        while (r > 84)
+            r -= 12;
+        cp.n[s] = (int8_t)live_voicing(r, cp.kind, cp.note[s]);
+    }
+    cp.started[s] = 0;
+    cp.vel[s] = (float)vel / 127.0f;
+    cp.wait[s] = live_gap();
+    if (kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0))
+        lp.track = loop_phrase_track();
+    lp.quiet = 0.0f;
+    if (kb.listen && lp.state == LP_EMPTY) {
+        loop_tap();
+        lp.autorec = 1;
+    }
+    live_start_note(s);
+    kb.energy = fm_minf(kb.energy + 0.12f, 1.0f);
+    if (cp.follow && hc.lock < 0 && !st.frozen) {
+        hm.pending = CH_LIVE;
+        if (st.mode != MODE_LOFI)
+            seq.chord_t = fm_minf(seq.chord_t, 0.2f);
+    }
+}
+
+static void live_tick(float dt)
+{
+    int s;
+    float gap = live_gap();
+    for (s = 0; s < NLIVE; s++) {
+        float d = dt;
+        while (cp.key[s] >= 0 && cp.started[s] < cp.n[s] && (cp.wait[s] -= d) <= 0.0f) {
+            live_start_note(s);
+            cp.wait[s] += gap;
+            d = 0.0f;
+        }
+    }
+}
+
 /* smear: keys and loop read backwards in overlapping grains with a little feedback (after Mood's reverse) */
 #define SM_N 32768
 #define SM_G 16384
@@ -2601,11 +2886,11 @@ static void drain(void)
             break;
         case C_ROOT:
             st.root = ((c.a % 12) + 12) % 12;
-            chord_set(hm.degree);
+            chord_set(chord_id());
             break;
         case C_MOOD:
             st.mood = clamp(c.a, 0, MS_NMOODS - 1);
-            chord_set(hm.degree);
+            chord_set(chord_id());
             break;
         case C_PLAY:
             st.playing = c.a;
@@ -2629,11 +2914,17 @@ static void drain(void)
         case C_NOTE:
             ms_note_now(c.a, c.b);
             break;
+        case C_CHORDNOTE:
+            live_chord(c.a, c.b);
+            break;
         case C_PANIC:
             lp.state = LP_EMPTY;
             lp.n = 0;
             for (int i = 0; i < NV; i++)
                 vo[i].stage = ST_OFF;
+            for (int i = 0; i < NLIVE; i++)
+                cp.key[i] = -1;
+            ms_vis.live_root = -1;
             bass.env = bass.env_target = 0.0f;
             break;
         case C_SEED:
@@ -2754,21 +3045,57 @@ static void drain(void)
                 else if (st.mode != MODE_LOFI && !hc.rate)
                     seq.chord_t = 1e9f;
             } else if (c.a == 2) {
-                hc.path = clamp(c.b, 0, 6);
+                hc.path = clamp(c.b, 0, PATH_BUILT);
+                if (hc.path != PATH_BUILT && hm.pending >= CH_BUILT && hm.pending < CH_LIVE)
+                    hm.pending = -1;
             } else if (c.a == 4) {       /* MINE: n << 12 | four degrees of 3 bits; the newest is heard soon */
                 int n = clamp(c.b >> 12 & 7, 1, 4), j;
                 for (j = 0; j < 4; j++)
                     hc.mine[j] = (int8_t)clamp(c.b >> (3 * j) & 7, 0, 6);
                 hc.mine_n = n;
-                if (hc.path == 6 && hc.lock < 0) {
+                if (hc.path == PATH_MINE && hc.lock < 0) {
                     hm.prog_i = n - 1;
                     hm.pending = hc.mine[n - 1];
                     if (st.mode != MODE_LOFI)
                         seq.chord_t = fm_minf(seq.chord_t, 0.3f + 0.3f * frand());
                 }
+            } else if (c.a == 5) {
+                int j = c.b >> 11 & 7;
+                hc.b_root[j] = (uint8_t)((c.b & 15) % 12);
+                hc.b_kind[j] = (uint8_t)clamp(c.b >> 4 & 31, 0, MS_NCHORDS - 1);
+                hc.b_len[j] = (uint8_t)(c.b >> 9 & 3);
+                if (hm.slot == j)
+                    chord_set(CH_BUILT + j);
+            } else if (c.a == 7) {
+                cp.type = clamp(c.b, 0, MS_NCHORDS);
+            } else if (c.a == 8) {
+                cp.voicing = clamp(c.b, 0, 3);
+            } else if (c.a == 9) {
+                cp.strum = u(clamp(c.b, 0, 100));
+            } else if (c.a == 10) {
+                cp.follow = c.b != 0;
+            } else if (c.a == 6) {       /* BUILT's count, the chord just made (heard soon), the chord removed */
+                int hear = (c.b >> 4 & 15) - 1, gone = (c.b >> 8 & 15) - 1;
+                hc.b_n = clamp(c.b & 15, 1, MS_NBUILT);
+                if (gone >= 0 && hm.slot > gone) {
+                    hm.slot--;
+                    hm.prog_i--;
+                }
+                if (hm.slot >= hc.b_n)
+                    hm.slot = hc.b_n - 1;
+                if (hm.prog_i >= hc.b_n)
+                    hm.prog_i = hc.b_n - 1;
+                if (hm.slot >= 0)
+                    ms_vis.chord_slot = (int8_t)hm.slot;
+                if (hear >= 0 && hear < hc.b_n && hc.path == PATH_BUILT && hc.lock < 0) {
+                    hm.prog_i = hear;
+                    hm.pending = CH_BUILT + hear;
+                    if (st.mode != MODE_LOFI)
+                        seq.chord_t = fm_minf(seq.chord_t, 0.3f + 0.3f * frand());
+                }
             } else {
                 hc.color = clamp(c.b, 0, 3);
-                chord_set(hm.degree);
+                chord_set(chord_id());
             }
             break;
         case C_MOTION:
@@ -2971,6 +3298,7 @@ static void control(void)
     gates();
     loop_tick();
     seeds_tick(dt);
+    live_tick(dt);
     motion_tick(dt);
     kb.energy *= 1.0f - dt / 20.0f;
     if (st.playing && !st.switching) {
@@ -3406,6 +3734,13 @@ void ms_init(void)
         kb.held[i][0] = kb.held[i][1] = kb.held[i][2] = -1;
     for (i = 0; i < 8; i++)
         kb.seed[i] = -1;
+    chord_set(0);
+    ms_vis.live_root = -1;
+    for (i = 0; i < NLIVE; i++)
+        cp.key[i] = -1;
+    cp.follow = 1;
+    cp.kind = MS_CHORD_MAJ7;
+    cp.centre = 64.0f;
     lp.fade = 0.3f;
     lp.mutate = 0.25f;
     lp.smear = 0.3f;
@@ -3433,6 +3768,7 @@ void ms_play(int on) { post(C_PLAY, on, 0); }
 void ms_freeze(int on) { post(C_FREEZE, on, 0); }
 void ms_new(void) { post(C_NEW, 0, 0); }
 void ms_note(int note, int vel) { post(C_NOTE, note, vel); }
+void ms_chord_note(int note, int vel) { post(C_CHORDNOTE, note, vel); }
 void ms_panic(void) { post(C_PANIC, 0, 0); }
 void ms_seed(uint32_t s) { post(C_SEED, (int)(s >> 16 & 0x7FFF), (int)(s & 0x7FFF)); }
 void ms_sleep_fade(float level) { st.sleep_target = fm_clampf(level, 0.0f, 1.0f); }

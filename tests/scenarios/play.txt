@@ -1,0 +1,37 @@
+# the CHORDS screen's PLAY page: each key plays a whole chord (TYPE KEY: the key's own 7th on that note), and with
+# FOLLOW the music moves to it; a TYPE puts that kind on every key; the chords go into a listening loop
+wait 600
+tap SEQ
+tap SEQ
+tap SEQ
+turn SELECT 2
+wait 50
+expect page 12
+expect liveroot -1
+key 7 down
+wait 1500
+expect liveroot 0
+expect livekind 0
+expect chordroot 0
+expect chordkind 0
+key 7 up
+key 9 down
+wait 1500
+expect liveroot 2
+expect livekind 1
+expect chordroot 2
+key 9 up
+turn K1 1
+key 10 down
+wav play.wav
+wait 2000
+expect liveroot 3
+expect livekind 4
+expect chordroot 3
+shot play.png
+key 10 up
+wait 2000
+wavstop
+expect peak_db_min -30
+expect peak_db_max -0.3
+expect loopn >5

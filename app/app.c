@@ -8,16 +8,27 @@
 #include <stddef.h>
 #include "fastmath.h"
 
-#define SET_MAGIC 0x4D4F5336u            /* "MOS6" */
+#define SET_MAGIC 0x4D4F5337u            /* "MOS7" */
 /* SELECT walks them in this order: the sound, its rhythm, the keys, the loops, then the setup */
-enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_CHORDS, PG_SETUP,
-       NPAGES };
-enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, NVIEWS };
+enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_CHORDS, PG_BUILD,
+       PG_PLAY, PG_SETUP, NPAGES };
+/* SEQ goes round the screens; SELECT walks the pages of the screen it is on */
+enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, VIEW_CHORDS, NVIEWS };
 static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "BEAT", "KEYS", "LAYERS", "SHAPE", "TAPE", "LIBRARY",
-                                              "CHORDS", "SETUP"};
-static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_GLO, B_GLO};
+                                              "SIMPLE", "BUILD", "PLAY", "SETUP"};
+static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_GLO, B_GLO, B_GLO,
+                                         B_GLO};
 static const char *const CHANGE_NAME[4] = {"STILL", "SLOW", "NORMAL", "OFTEN"};
-static const char *const PATH_NAME[7] = {"SCENE", "CIRCLE", "DREAM", "MOODY", "SONG", "DRONE", "MINE"};
+static const char *const PATH_NAME[8] = {"SCENE", "CIRCLE", "DREAM", "MOODY", "SONG", "DRONE", "MINE", "BUILT"};
+enum { PATH_MINE = 6, PATH_BUILT = 7 };
+/* BUILD's TYPE knob walks the chord kinds in this order, plain to coloured */
+static const uint8_t KIND_ORDER[MS_NCHORDS] = {
+    MS_CHORD_MAJ, MS_CHORD_MIN, MS_CHORD_DOM7, MS_CHORD_MAJ7, MS_CHORD_MIN7, MS_CHORD_6, MS_CHORD_MIN6, MS_CHORD_9,
+    MS_CHORD_MIN9, MS_CHORD_MAJ9, MS_CHORD_ADD9, MS_CHORD_SUS2, MS_CHORD_SUS, MS_CHORD_7SUS, MS_CHORD_DIM, MS_CHORD_DIM7,
+    MS_CHORD_HALFDIM, MS_CHORD_7B5, MS_CHORD_AUG,
+};
+static const char *const LEN_NAME[4] = {"1/2x", "1x", "2x", "4x"};
+static const char *const VOICING_NAME[4] = {"CLOSE", "OPEN", "WIDE", "SMOOTH"};
 static const char *const COLOR_NAME[4] = {"LUSH", "PLAIN", "SUS", "OPEN"};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
 static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"};
@@ -27,17 +38,26 @@ static const char *const PAGE_KNOBS[NPAGES][4] = {
     {0}, {0}, {"DELAY", "TIME", "REPEATS", "FILM"}, {"MOD", "RANDOM", "TONE", "SPREAD"}, {"KIT", "PATTERN", "LEVEL", "BASS"},
     {"SNAP", "HARMONY", "VOICE", "TAP"}, {"LAYER", "LEVEL", "REDO", "CLEAR"}, {"FADE", "MUTATE", "SHIFT", "SPEED"},
     {"WARBLE", "DIRT", "AGE", "SMEAR"}, {"LOOP", "", "", "DELETE"}, {"CHORD", "CHANGE", "PATH", "COLOR"},
-    {"TEMPO", "KEY", "MOOD", "SLEEP"},
+    {"CHORD", "ROOT", "TYPE", "LENGTH"}, {"TYPE", "VOICING", "STRUM", "FOLLOW"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
 static const uint8_t PAGE_STEPS[NPAGES][4] = {
-    {0}, {0}, {0, 5, 0, 0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 6, 3}, {0},
+    {0}, {0}, {0, 5, 0, 0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 7, 3}, {0}, {MS_NCHORDS, 3, 0, 1}, {0},
 };
-#define CONFIRM_WAIT 3000u               /* ms an armed CLEAR or DELETE waits for REC */
+#define CONFIRM_WAIT 6000u               /* ms an armed CLEAR, DELETE or REMOVE waits for REC */
+#define LAPSE_WAIT 2000u                 /* ms after one lapses that REC does nothing, as it was meant for it */
+#define BUILD_WAIT 6000u                 /* ms after a BUILD tap or edit that the next tap goes to the next chord */
 #define LAYER_LVL 70                     /* a layer's level when it is new */
 static int loop_page(int p) { return p >= PG_LOOP && p <= PG_LIBRARY; }
+static int chord_page(int p) { return p >= PG_CHORDS && p <= PG_PLAY; }
+/* the screen a page lives on, when it is not one of the sound's */
+static int page_view(int p) { return loop_page(p) ? VIEW_LOOPS : chord_page(p) ? VIEW_CHORDS : -1; }
+static int own_view(int v) { return v == VIEW_LOOPS || v == VIEW_CHORDS; }
+static int view_first(int v) { return v == VIEW_LOOPS ? PG_LOOP : PG_CHORDS; }
 static void lib_load(int i);
 static void lib_delete(int i);
+static void arm_turn(int32_t d, const char *what, const char *armed);
+static void degree_name(int d, char *t);
 static const uint8_t SLEEP_MIN[] = {0, 10, 20, 30, 45, 60, 90};
 #define NSLEEP (sizeof SLEEP_MIN)
 
@@ -56,6 +76,9 @@ typedef struct {
     uint8_t beat[MS_NMODES][4];          /* kit, pattern, level, bass */
     uint8_t chords[4];                   /* chord (0 AUTO, 1..7), change, path, color */
     uint8_t mine_n, mine[4];             /* PATH MINE: the progression played on the CHORDS page's keys, degrees 0..6 */
+    uint8_t b_n;                         /* PATH BUILT: the chords made on the BUILD screen */
+    uint8_t b_root[MS_NBUILT], b_kind[MS_NBUILT], b_len[MS_NBUILT];
+    uint8_t play[4];                     /* PLAY: type (0 the key's own, else 1 + KIND_ORDER's), voicing, strum, follow */
 } settings_t;
 static settings_t set;
 
@@ -103,6 +126,16 @@ static void settings_defaults(void)
     set.chords[1] = 2;                    /* NORMAL */
     set.mine_n = 4;
     set.mine[0] = 0, set.mine[1] = 5, set.mine[2] = 3, set.mine[3] = 4;   /* I vi IV V until you play your own */
+    {
+        static const uint8_t ROOT[4] = {0, 9, 5, 7}, KIND[4] = {MS_CHORD_MAJ7, MS_CHORD_MIN9, MS_CHORD_MAJ7, MS_CHORD_7SUS};
+        set.play[0] = 0, set.play[1] = 3, set.play[2] = 15, set.play[3] = 1;   /* the key's chords, SMOOTH, FOLLOW */
+        set.b_n = 4;                     /* Cmaj7 Am9 Fmaj7 G7sus4 until you build your own */
+        for (m = 0; m < MS_NBUILT; m++) {
+            set.b_root[m] = ROOT[m & 3];
+            set.b_kind[m] = KIND[m & 3];
+            set.b_len[m] = 1;
+        }
+    }
 }
 
 static int knob_ok(int page, int i, int v)
@@ -119,12 +152,17 @@ static int settings_ok(void)
     for (m = 0; m < 4; m++)
         if (!knob_ok(PG_KEYS, m, set.keys[m]) || !knob_ok(PG_SHAPE, m, set.loop[m]) || !knob_ok(PG_FX, m, set.fx[m])
             || !knob_ok(PG_TAPE, m, set.tape[m]) || !knob_ok(PG_MOTION, m, set.motion[m])
-            || !knob_ok(PG_CHORDS, m, set.chords[m]))
+            || !knob_ok(PG_CHORDS, m, set.chords[m]) || !knob_ok(PG_PLAY, m, set.play[m]))
             return 0;
     if (set.mine_n < 1 || set.mine_n > 4)
         return 0;
     for (m = 0; m < 4; m++)
         if (set.mine[m] > 6)
+            return 0;
+    if (set.b_n < 1 || set.b_n > MS_NBUILT)
+        return 0;
+    for (m = 0; m < MS_NBUILT; m++)
+        if (set.b_root[m] > 11 || set.b_kind[m] >= MS_NCHORDS || set.b_len[m] > 3)
             return 0;
     for (m = 0; m < MS_NMODES * 4; m++)
         if (!knob_ok(PG_BEAT, m % 4, set.beat[m / 4][m % 4]))
@@ -169,6 +207,17 @@ static void mine_send(void)
     ms_chords(4, set.mine_n << 12 | set.mine[3] << 9 | set.mine[2] << 6 | set.mine[1] << 3 | set.mine[0]);
 }
 
+static void play_send(int i)
+{
+    int v = set.play[i];
+    ms_chords(7 + i, i == 0 && v ? KIND_ORDER[v - 1] + 1 : v);
+}
+
+static void built_send(int j)
+{
+    ms_chords(5, j << 11 | set.b_len[j] << 9 | set.b_kind[j] << 4 | set.b_root[j]);
+}
+
 static void send_all(void)
 {
     int i;
@@ -181,9 +230,13 @@ static void send_all(void)
         ms_fx(i, set.fx[i]);
         ms_motion(i, set.motion[i]);
         ms_chords(i, set.chords[i]);
+        play_send(i);
     }
     ms_space(set.space);
     mine_send();
+    for (i = 0; i < MS_NBUILT; i++)
+        built_send(i);
+    ms_chords(6, set.b_n);
     for (i = 0; i < 4; i++)
         ms_beat(i, set.beat[set.mode][i]);
 }
@@ -215,8 +268,8 @@ void app_init(void)
             }
         }
     }
-    if (loop_page(set.page) != (set.view == VIEW_LOOPS))
-        set.page = set.view == VIEW_LOOPS ? PG_LOOP : PG_HOME;
+    if (page_view(set.page) != (own_view(set.view) ? set.view : -1))
+        set.page = own_view(set.view) ? view_first(set.view) : PG_HOME;
     send_all();
 }
 
@@ -243,12 +296,18 @@ static struct {
     uint32_t keys, btn;
     uint32_t save_t, arp_t;
     uint8_t key_note[NKEYS];             /* note sent at key down, so the note-off matches after an octave change */
+    uint32_t key_chord;                  /* keys down on PLAY: their note-off ends a whole chord */
     uint8_t track_lvl[MS_NLAYERS];       /* the layers' levels; not saved, as the loop itself is not */
-    uint8_t sel_track, sel_slot;
+    uint8_t sel_track, sel_slot, sel_chord;
     uint8_t confirm[4];                  /* [3]: CLEAR or DELETE armed, waiting for REC */
     uint32_t confirm_t;
     uint32_t seq_t;
     uint32_t mine_t;                     /* the last chord key, plat_ms | 1 */
+    uint32_t build_t;                    /* the last BUILD key or edit, plat_ms | 1 */
+    uint8_t build_from, build_taps;      /* where that run of taps began, and how many */
+    uint8_t chord_tab;                   /* the CHORDS page last open, for GLO */
+    uint8_t play_shown;                  /* PLAY's chord still matches TYPE */
+    uint32_t lapse_t;                    /* an armed CLEAR, DELETE or REMOVE let go, plat_ms | 1 */
     uint8_t view_before, page_before;    /* where the LOOPS screen was opened from, to go back to */
     uint8_t tracks_seen;                 /* ms_vis.lp_tracks last frame: a layer appearing gets its level back */
     uint8_t save_long;                   /* SAVE held: 1 resets the scene on release, 2 everything */
@@ -323,7 +382,8 @@ void app_say(const char *a, const char *b)
 static uint8_t *page_vals(int page)
 {
     return page == PG_KEYS ? set.keys : page == PG_SHAPE ? set.loop : page == PG_TAPE ? set.tape : page == PG_FX ? set.fx
-         : page == PG_MOTION ? set.motion : page == PG_CHORDS ? set.chords : page == PG_BEAT ? set.beat[set.mode] : 0;
+         : page == PG_MOTION ? set.motion : page == PG_CHORDS ? set.chords : page == PG_PLAY ? set.play
+         : page == PG_BEAT ? set.beat[set.mode] : 0;
 }
 
 static const char *knob_name(int i)
@@ -345,6 +405,16 @@ static int knob_value(int i)   /* 0..100 */
              : i == 2 ? (ms_vis.lp_redo == ui.sel_track ? 100 : 0) : ui.confirm[3] * 50;
     if (set.page == PG_LIBRARY)
         return i == 0 ? ui.sel_slot * 100 / 7 : i == 3 ? ui.confirm[3] * 50 : 0;
+    if (set.page == PG_BUILD) {
+        int j = ui.sel_chord, k;
+        if (i == 0)
+            return j * 100 / (MS_NBUILT - 1);
+        if (j >= set.b_n || (i == 3 && ui.confirm[3]))
+            return 0;
+        for (k = 0; k < MS_NCHORDS - 1 && KIND_ORDER[k] != set.b_kind[j]; k++)
+            ;
+        return i == 1 ? set.b_root[j] * 100 / 11 : i == 2 ? k * 100 / (MS_NCHORDS - 1) : set.b_len[j] * 100 / 3;
+    }
     if (set.page == PG_SHAPE && i == 2)
         return 50;
     if (set.page == PG_HOME)
@@ -393,7 +463,7 @@ static void chord_key(int note, uint32_t now)
 {
     char t[24];
     int i, d = note_degree(note);
-    if (set.mine_n >= 4 || now - ui.mine_t > 4000u || !ui.mine_t)
+    if (set.mine_n >= 4 || now - ui.mine_t > BUILD_WAIT || !ui.mine_t)
         set.mine_n = 0;
     ui.mine_t = now | 1u;
     set.mine[set.mine_n++] = (uint8_t)d;
@@ -405,13 +475,215 @@ static void chord_key(int note, uint32_t now)
     ms_chords(2, 6);
     mine_send();
     set_dirty = 1;
-    t[0] = 0;
-    for (i = 0; i < set.mine_n; i++) {
-        if (i)
-            text_cat(t, " ");
-        text_cat(t, ROMAN[set.mine[i]]);
+    {
+        char a[24] = "MINE ";
+        int_text(set.mine_n, a + 5);
+        text_cat(a, set.mine_n < 4 ? " OF 4" : " OF 4. DONE");
+        t[0] = 0;
+        degree_name(set.mine[set.mine_n - 1], t);
+        app_say(a, t);
     }
-    app_say("MINE", t);
+}
+
+/* the BUILD screen: up to MS_NBUILT chords of any root, kind and length. A key sets the chosen chord's root, with
+ * the chord the key has on that note (a major one off the key); a tap soon after goes to the next chord, so a
+ * progression can be played in, while the knobs stay on the chord just tapped */
+static void chord_name(int j, char *t)
+{
+    t[0] = 0;
+    text_cat(t, MS_NOTE_NAME[set.b_root[j]]);
+    text_cat(t, MS_CHORD_SUFFIX[set.b_kind[j]]);
+}
+
+static int key_kind_on(int pc)
+{
+    uint16_t mask = ms_scale_mask(set.mood[set.mode], set.root);
+    int d, third, fifth, seventh;
+    if (!(mask >> pc & 1u))
+        return MS_CHORD_MAJ;
+    d = note_degree(pc);
+    third = (degree_pc((d + 2) % 7) - pc + 12) % 12;
+    fifth = (degree_pc((d + 4) % 7) - pc + 12) % 12;
+    seventh = (degree_pc((d + 6) % 7) - pc + 12) % 12;
+    return fifth == 6 ? MS_CHORD_HALFDIM : third == 3 ? MS_CHORD_MIN7 : seventh == 11 ? MS_CHORD_MAJ7 : MS_CHORD_DOM7;
+}
+
+/* the progression is BUILT's from the first change made to it, and the chord just changed is heard soon */
+static void built_use(int hear)
+{
+    if (set.chords[2] != PATH_BUILT || set.chords[0]) {
+        set.chords[2] = PATH_BUILT;
+        set.chords[0] = 0;
+        ms_chords(0, 0);
+        ms_chords(2, PATH_BUILT);
+    }
+    ms_chords(6, set.b_n | (hear + 1) << 4);
+    set_dirty = 1;
+}
+
+/* the chord the key has on degree d, by name: Am7 */
+static void degree_name(int d, char *t)
+{
+    int pc = degree_pc(d), kind = key_kind_on(pc);
+    text_cat(t, MS_NOTE_NAME[pc]);
+    text_cat(t, MS_CHORD_SUFFIX[kind]);
+}
+
+static void say_chord(int j)
+{
+    char a[12], t[16];
+    a[0] = 0;
+    text_cat(a, "CHORD ");
+    int_text(j + 1, a + 6);
+    if (j >= set.b_n) {
+        app_say(a, "NEW: TAP A KEY");
+        return;
+    }
+    chord_name(j, t);
+    if (set.b_len[j] != 1) {
+        text_cat(t, " ");
+        text_cat(t, LEN_NAME[set.b_len[j]]);
+    }
+    app_say(a, t);
+}
+
+/* a new chord at the end starts from the one before it */
+static int built_grow(int j)
+{
+    if (j < set.b_n)
+        return 1;
+    if (j != set.b_n || set.b_n >= MS_NBUILT)
+        return 0;
+    set.b_root[j] = set.b_root[j - 1];
+    set.b_kind[j] = set.b_kind[j - 1];
+    set.b_len[j] = 1;
+    set.b_n++;
+    return 1;
+}
+
+static void build_key(int note, uint32_t now)
+{
+    int j = ui.sel_chord;
+    if (ui.build_t && now - ui.build_t < BUILD_WAIT && j + 1 < MS_NBUILT) {
+        j++;
+    } else if (!ui.build_t || now - ui.build_t >= BUILD_WAIT) {
+        ui.build_from = (uint8_t)j;
+        ui.build_taps = 0;
+    }
+    ui.build_taps++;
+    ui.build_t = now | 1u;
+    ui.confirm[3] = 0;                   /* REMOVE was armed for the chord chosen before */
+    ui.confirm_t = 0;
+    if (!built_grow(j))
+        return;
+    ui.sel_chord = (uint8_t)j;
+    set.b_root[j] = (uint8_t)(note % 12);
+    set.b_kind[j] = (uint8_t)key_kind_on(note % 12);
+    built_send(j);
+    built_use(j);
+    say_chord(j);
+}
+
+/* a run of taps from the first chord, then left alone, that stops short of the old progression ends it there:
+ * playing C Am F in leaves C Am F, not C Am F and an old 4th. Picking a chord with K1 ends a run as it is */
+static void build_end(void)
+{
+    if (!ui.build_t)
+        return;
+    ui.build_t = 0;
+    if (ui.build_from == 0 && ui.build_taps >= 2 && ui.sel_chord + 1 < set.b_n) {
+        char t[16];
+        set.b_n = (uint8_t)(ui.sel_chord + 1);
+        ms_chords(6, set.b_n);
+        set_dirty = 1;
+        t[0] = 0;
+        int_text(set.b_n, t);
+        text_cat(t, " CHORDS");
+        app_say("PROGRESSION", t);
+    }
+}
+
+static void build_select(int32_t d)
+{
+    ui.build_t = 0;
+    int top = set.b_n < MS_NBUILT ? set.b_n : MS_NBUILT - 1;   /* one past the last: a new chord */
+    ui.sel_chord = (uint8_t)clamp(ui.sel_chord + d, 0, top);
+    ui.confirm[3] = 0;
+    ui.confirm_t = 0;
+    say_chord(ui.sel_chord);
+}
+
+static void build_tick(uint32_t now)
+{
+    if (ui.build_t && now - ui.build_t >= BUILD_WAIT)
+        build_end();
+}
+
+static void build_remove(void)
+{
+    int j = ui.sel_chord, i;
+    if (j >= set.b_n || set.b_n < 2)
+        return;
+    ui.build_t = 0;                      /* a run of taps ends here, as it is */
+    for (i = j; i + 1 < MS_NBUILT; i++) {
+        set.b_root[i] = set.b_root[i + 1];
+        set.b_kind[i] = set.b_kind[i + 1];
+        set.b_len[i] = set.b_len[i + 1];
+    }
+    set.b_n--;
+    ms_chords(6, set.b_n | (j + 1) << 8);   /* before the chords move up, so the one playing keeps its place */
+    for (i = j; i < MS_NBUILT; i++)
+        built_send(i);
+    if (ui.sel_chord >= set.b_n)
+        ui.sel_chord = (uint8_t)(set.b_n - 1);
+    set_dirty = 1;
+    app_say("CHORD REMOVED", "");
+}
+
+/* K1 picks the chord, one past the last a new one; LENGTH turned left past 1/2x arms REMOVE, which REC does */
+static int build_turn(int i, int32_t d)
+{
+    int j = ui.sel_chord, k;
+    char t[16];
+    if (i == 0) {
+        build_select(d);
+        return 1;
+    }
+    if (i == 3 && j < set.b_n && (ui.confirm[3] || (set.b_len[j] == 0 && d < 0))) {
+        if (set.b_n < 2) {
+            app_say("REMOVE", "ONE CHORD STAYS");
+        } else {
+            arm_turn(-d, "REMOVE", "PRESS REC");
+            if (ui.confirm[3]) {
+                chord_name(j, t);
+                text_cat(t, "?");
+                app_say("REMOVE", t);
+            }
+        }
+        return 1;
+    }
+    if (ui.build_t)                      /* an edit between taps keeps the run going */
+        ui.build_t = plat_ms() | 1u;
+    if (!built_grow(j))
+        return 1;
+    if (i == 1) {
+        set.b_root[j] = (uint8_t)((set.b_root[j] + d % 12 + 12) % 12);
+    } else if (i == 2) {
+        for (k = 0; k < MS_NCHORDS - 1 && KIND_ORDER[k] != set.b_kind[j]; k++)
+            ;
+        set.b_kind[j] = KIND_ORDER[clamp(k + d, 0, MS_NCHORDS - 1)];
+    } else {
+        set.b_len[j] = (uint8_t)clamp(set.b_len[j] + d, 0, 3);
+    }
+    built_send(j);
+    built_use(j);
+    if (i == 3) {
+        chord_name(j, t);
+        app_say(t, LEN_NAME[set.b_len[j]]);
+    } else {
+        say_chord(j);
+    }
+    return 1;
 }
 
 static void chords_text(int i, char *t)
@@ -420,7 +692,7 @@ static void chords_text(int i, char *t)
     if (i == 0 && c[0]) {
         text_cat(t, ROMAN[c[0] - 1]);
         text_cat(t, " ");
-        text_cat(t, MS_NOTE_NAME[degree_pc(c[0] - 1)]);
+        degree_name(c[0] - 1, t);
     } else {
         text_cat(t, i == 0 ? "AUTO" : i == 1 ? CHANGE_NAME[c[1]] : i == 2 ? PATH_NAME[c[2]] : COLOR_NAME[c[3]]);
     }
@@ -456,6 +728,21 @@ static void knob_text(int i, char *t)
         }
         return;
     }
+    if (set.page == PG_BUILD) {
+        int j = ui.sel_chord;
+        if (i == 0) {
+            int_text(j + 1, t);
+            text_cat(t, j >= set.b_n ? " NEW" : "");
+        } else if (j >= set.b_n) {
+            text_cat(t, "-");
+        } else if (i == 3 && ui.confirm[3]) {
+            text_cat(t, "REMOVE?");
+        } else {
+            text_cat(t, i == 1 ? MS_NOTE_NAME[set.b_root[j]] : i == 2 ? (set.b_kind[j] == MS_CHORD_MAJ ? "maj"
+                        : MS_CHORD_SUFFIX[set.b_kind[j]]) : LEN_NAME[set.b_len[j]]);
+        }
+        return;
+    }
     if (set.page == PG_SHAPE && i == 2) {
         text_cat(t, "< >");
         return;
@@ -468,6 +755,12 @@ static void knob_text(int i, char *t)
         text_cat(t, MS_DIV_NAME[set.fx[1]]);
     else if (set.page == PG_CHORDS)
         chords_text(i, t);
+    else if (set.page == PG_PLAY && i != 2) {
+        const uint8_t *p = set.play;
+        int kind = p[0] ? KIND_ORDER[p[0] - 1] : 0;
+        text_cat(t, i == 0 ? (!p[0] ? "KEY" : kind == MS_CHORD_MAJ ? "maj" : MS_CHORD_SUFFIX[kind])
+                    : i == 1 ? VOICING_NAME[p[1]] : p[3] ? "ON" : "OFF");
+    }
     else if (set.page == PG_BEAT && i != 2) {
         const uint8_t *b = set.beat[m];
         text_cat(t, i == 0 ? MS_KIT_NAME[b[0]] : i == 1 ? MS_PATTERN_NAME[b[1]] : MS_BASS_NAME[b[3]]);
@@ -532,11 +825,13 @@ static void layer_clear(int t)
 /* REC while CLEAR or DELETE is armed: do it. 1 = it was armed */
 static int armed_rec(void)
 {
-    if (!ui.confirm[3] || (set.page != PG_LOOP && set.page != PG_LIBRARY))
+    if (!ui.confirm[3] || (set.page != PG_LOOP && set.page != PG_LIBRARY && set.page != PG_BUILD))
         return 0;
     ui.confirm[3] = 0;
     ui.confirm_t = 0;
-    if (set.page == PG_LOOP)
+    if (set.page == PG_BUILD)
+        build_remove();
+    else if (set.page == PG_LOOP)
         layer_clear(ui.sel_track);
     else
         lib_delete(ui.sel_slot);
@@ -637,6 +932,9 @@ static void knob_turn(int i, int32_t d)
     } else if (set.page == PG_MIX) {
         set.mix[m][i] = (uint8_t)clamp(set.mix[m][i] + 2 * d, 0, 100);
         ms_mix(i, set.mix[m][i]);
+    } else if (set.page == PG_BUILD) {
+        build_turn(i, d);
+        return;
     } else if (set.page == PG_LOOP || set.page == PG_LIBRARY || (set.page == PG_SHAPE && i == 2)) {
         if (!pages_act(i, d))
             say_knob(i);
@@ -655,8 +953,17 @@ static void knob_turn(int i, int32_t d)
             tape_send(i);
         else if (set.page == PG_MOTION)
             ms_motion(i, v[i]);
-        else if (set.page == PG_CHORDS)
+        else if (set.page == PG_CHORDS) {
+            if (i == 2 && v[0]) {        /* a held chord would keep the new path from being heard */
+                v[0] = 0;
+                ms_chords(0, 0);
+            }
             ms_chords(i, v[i]);
+        } else if (set.page == PG_PLAY) {
+            play_send(i);
+            if (i == 0)
+                ui.play_shown = 0;
+        }
         else
             ms_fx(i, v[i]);
     } else if (i == 0) {
@@ -707,17 +1014,23 @@ static void scene_step(int32_t d)
     app_say(MS_MODE_NAME[m], ms_scene(m, set.scene[m])->name);
 }
 
-/* the loop pages live on the LOOPS screen: going to one opens it, going elsewhere goes back to where it was opened */
+/* the loop and chord pages live on their own screens: going to one opens it, going to a page of the sound goes back
+ * to the screen it was opened from */
 static void page_set(int p)
 {
-    if (loop_page(p) && set.view != VIEW_LOOPS) {
-        ui.view_before = set.view;
-        ui.page_before = set.page;
-        set.view = VIEW_LOOPS;
-    } else if (!loop_page(p) && set.view == VIEW_LOOPS) {
-        set.view = ui.view_before == VIEW_LOOPS ? VIEW_STUDIO : ui.view_before;
+    int v = page_view(p);
+    if (v >= 0 && set.view != v) {
+        if (!own_view(set.view)) {
+            ui.view_before = set.view;
+            ui.page_before = set.page;
+        }
+        set.view = (uint8_t)v;
+    } else if (v < 0 && own_view(set.view)) {
+        set.view = own_view(ui.view_before) ? VIEW_STUDIO : ui.view_before;
     }
     set.page = (uint8_t)p;
+    if (chord_page(p))
+        ui.chord_tab = (uint8_t)p;
     ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
     ui.confirm_t = 0;
     ui.redraw = 1;
@@ -952,9 +1265,18 @@ static void input(void)
     for (k = 0; k < NKEYS; k++) {
         uint32_t bit = 1u << k;
         int note = 53 + (int)k + 12 * set.octave;
-        if ((keys & bit) && !(ui.keys & bit) && set.page == PG_CHORDS) {
+        if ((keys & bit) && !(ui.keys & bit) && set.page == PG_PLAY) {
+            ui.key_note[k] = (uint8_t)note;
+            ui.key_chord |= bit;
+            ui.play_shown = 1;
+            ms_chord_note(note, 96);
+            plat_midi_out(0x09u | 0x90u << 8 | (uint32_t)note << 16 | 96u << 24);
+        } else if ((keys & bit) && !(ui.keys & bit) && (set.page == PG_CHORDS || set.page == PG_BUILD)) {
             ui.key_note[k] = 255u;       /* a chord key: no note to end */
-            chord_key(note, now);
+            if (set.page == PG_BUILD)
+                build_key(note, now);
+            else
+                chord_key(note, now);
         } else if ((keys & bit) && !(ui.keys & bit)) {
             ui.key_note[k] = (uint8_t)note;
             if (set.keys[3] == 2)        /* HOLD: say what the tap does before the engine does it */
@@ -963,7 +1285,11 @@ static void input(void)
             plat_midi_out(0x09u | 0x90u << 8 | (uint32_t)note << 16 | 96u << 24);
         } else if (!(keys & bit) && (ui.keys & bit) && ui.key_note[k] != 255u) {
             note = ui.key_note[k];
-            ms_note(note, 0);
+            if (ui.key_chord & bit)
+                ms_chord_note(note, 0);
+            else
+                ms_note(note, 0);
+            ui.key_chord &= ~bit;
             plat_midi_out(0x08u | 0x80u << 8 | (uint32_t)note << 16);
         }
     }
@@ -980,8 +1306,13 @@ static void input(void)
             app_say(ui.playing ? "PLAY" : "REST", "");
             break;
         case B_REC:
-            if (!armed_rec())
-                ui.arp_t = now | 1u;
+            if (armed_rec())
+                break;
+            if (ui.lapse_t && now - ui.lapse_t < LAPSE_WAIT) {
+                app_say("TOO LATE", "NOTHING DONE");
+                break;
+            }
+            ui.arp_t = now | 1u;
             break;
         case B_EDIT:
             ms_seed(now);
@@ -1019,7 +1350,7 @@ static void input(void)
             page_set(set.page == PG_FX ? PG_MOTION : PG_FX);
             break;
         case B_GLO:
-            page_set(set.page == PG_SETUP ? PG_CHORDS : PG_SETUP);
+            page_set(set.page == PG_SETUP ? (chord_page(ui.chord_tab) ? ui.chord_tab : PG_CHORDS) : PG_SETUP);
             break;
         case B_ARP:
             ui.frozen = !ui.frozen;
@@ -1041,20 +1372,23 @@ static void input(void)
     if (ui.seq_t && !(btn >> B_SEQ & 1u)) {   /* SEQ: a press switches the view; held with keys, loads slots */
         ui.seq_t = 0;
         {
+            static const char *const VIEW_NAME[NVIEWS] = {"PICTURE", "STUDIO", "LOOPS", "CHORDS"};
+            static const char *const VIEW_HINT[NVIEWS] = {"", "", "TURN SELECT FOR MORE", "TURN SELECT FOR MORE"};
             int next = (set.view + 1) % NVIEWS;
-            if (next == VIEW_LOOPS) {    /* the LOOPS screen has the loop pages only */
-                ui.view_before = set.view;
-                ui.page_before = set.page;
-                set.page = PG_LOOP;
-            } else if (set.view == VIEW_LOOPS) {
-                set.page = loop_page(ui.page_before) ? PG_HOME : ui.page_before;
+            if (own_view(next)) {        /* the LOOPS and CHORDS screens have their own pages only */
+                if (!own_view(set.view)) {
+                    ui.view_before = set.view;
+                    ui.page_before = set.page;
+                }
+                set.page = (uint8_t)(next == VIEW_CHORDS && chord_page(ui.chord_tab) ? ui.chord_tab : view_first(next));
+            } else if (own_view(set.view)) {
+                set.page = page_view(ui.page_before) >= 0 ? PG_HOME : ui.page_before;
             }
             set.view = (uint8_t)next;
             ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
             set_dirty = 1;
             ui.label_until = now + 3000u;
-            app_say(set.view == VIEW_SCENE ? "PICTURE" : set.view == VIEW_STUDIO ? "STUDIO" : "LOOPS",
-                    set.view == VIEW_LOOPS ? "SELECT FOR MORE" : "");
+            app_say(VIEW_NAME[set.view], VIEW_HINT[set.view]);
         }
     }
     if (ui.save_t) {                     /* SAVE: a tap saves; held two seconds and let go, resets the scene */
@@ -1070,6 +1404,8 @@ static void input(void)
             ui.save_t = 0;
             if (ui.save_long == 2) {     /* every setting as it first starts; the loop library stays */
                 settings_defaults();
+                ui.sel_chord = 0;
+                ui.build_t = 0;
                 sleep_set(0);                /* a fade under way would otherwise stay down */
                 ms_loop(1);
                 ms_panic();
@@ -1118,17 +1454,12 @@ static void input(void)
     if ((e = plat_enc(EN_PRESET)) != 0)
         scene_step(e);
     if ((e = plat_enc(EN_SELECT)) != 0) {
-        if (set.view == VIEW_LOOPS) {
-            int n = PG_LIBRARY - PG_LOOP + 1;
-            page_set(PG_LOOP + ((set.page - PG_LOOP + e) % n + n) % n);
-        } else {                         /* the loop pages are the LOOPS screen's own, so SELECT goes round them */
-            int p = set.page, n = e > 0 ? e : -e, dir = e > 0 ? 1 : -1;
-            while (n--)
-                do
-                    p = (p + dir + NPAGES) % NPAGES;
-                while (loop_page(p));
-            page_set(p);
-        }
+        int p = set.page, n = e > 0 ? e : -e, dir = e > 0 ? 1 : -1, v = own_view(set.view) ? set.view : -1;
+        while (n--)                      /* round the pages of this screen only */
+            do
+                p = (p + dir + NPAGES) % NPAGES;
+            while (page_view(p) != v);
+        page_set(p);
     }
     for (k = 0; k < 4u; k++)
         if ((e = plat_enc(EN_K1 + (int)k)) != 0)
@@ -1238,9 +1569,13 @@ void app_frame(void)
     lib_tick(now);
     if (ui.confirm_t && now - ui.confirm_t > CONFIRM_WAIT) {   /* armed and left alone: let go */
         ui.confirm_t = 0;
+        if (ui.confirm[3]) {             /* still armed: else it was let go another way */
+            ui.lapse_t = now | 1u;
+            app_say("CANCELLED", "NOTHING DONE");
+        }
         ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
-        ui.redraw = 1;
     }
+    build_tick(now);
     export_tick();
     if (ui.redraw || now - ui.vis_at >= 50u) {   /* 20 fps */
         ui.redraw = 0;
@@ -1274,6 +1609,14 @@ else if (!strcmp(what, "held"))
         *got = slots.s[atoi(what + 4) % NSLOTS].n;
     else if (!strcmp(what, "minen"))
         *got = set.mine_n;
+    else if (!strcmp(what, "built"))
+        *got = set.b_n;
+    else if (!strcmp(what, "chordslot"))
+        *got = ms_vis.chord_slot;
+    else if (!strcmp(what, "liveroot"))
+        *got = ms_vis.live_root;
+    else if (!strcmp(what, "livekind"))
+        *got = ms_vis.live_kind;
     else if (!strcmp(what, "path"))
         *got = set.chords[2];
     else if (!strcmp(what, "chordroot"))

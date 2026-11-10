@@ -4,7 +4,7 @@ tap GLO
 turn K1 20
 turn PRESET -3
 wait 300
-expect page 11
+expect page 13
 press SAVE
 wait 6500
 release SAVE

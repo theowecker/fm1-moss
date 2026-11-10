@@ -9,12 +9,12 @@ picks up what you play.
 
 - **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
-- **SELECT** steps through the pages in order: the sound (HOME, MIX, FX, MOTION), the beat, the keys, CHORDS and
-  SETUP.
-  The loop pages have their own screen: press LFO. **K1 to K4** change the page you are on.
+- **SELECT** steps through the pages of the screen you are on: on the picture and the studio, the sound (HOME, MIX,
+  FX, MOTION), the beat, the keys and SETUP. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
 - **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
-- **SEQ** steps through the three screens: the picture, the studio and the loops.
+- **SEQ** steps through the four screens: the picture, the studio, the loops and the chords. The loops and the
+  chords have their own pages, which SELECT steps through there.
 - **SAVE** saves your settings and your loops.
 
 ## The panel
@@ -23,19 +23,19 @@ picks up what you play.
 | --- | --- |
 | PRESETS | Next or previous scene |
 | ALGORITHM | Next or previous space |
-| SELECT | Next or previous page |
+| SELECT | Next or previous page of the screen you are on |
 | HOME | The HOME page |
 | SEL | The MIX page. Press again for BEAT |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
 | LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
 | FX | The FX page. Press again for MOTION |
-| GLO | The SETUP page. Press again for CHORDS |
+| GLO | The SETUP page. Press again for the CHORDS screen |
 | K1 to K4 | The four knobs of the page you are on |
 | REC | The looper: tap to keep the loop from fading (tap again to let it fade). Hold for a second to clear it. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
-| SEQ | The next screen: PICTURE, STUDIO, LOOPS |
+| SEQ | The next screen: PICTURE, STUDIO, LOOPS, CHORDS |
 | SAVE | Save your settings and your loop library. Hold for two seconds and let go to reset the scene. Hold for six to reset everything (your saved loops stay) |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
@@ -201,7 +201,7 @@ A loop holds up to eight layers. This page works on one at a time.
 | LAYER | Picks the layer, 1 to 8. Its lane is marked and its number shows on the right |
 | LEVEL | That layer's level. All the way down is OFF, which mutes it |
 | REDO | Turn right to redo that layer: it plays on until your next phrase, which replaces it. With TAP on LISTEN that is when you start playing; on PLAY, when you tap REC to record over the loop. Its lane pulses red while it waits. Turn left to change your mind |
-| CLEAR | Turn right and the screen says PRESS REC TO CLEAR. Press REC within three seconds and that layer is erased. Turning left or waiting lets it go, so a knob turned by accident never erases anything |
+| CLEAR | Turn right and the screen says PRESS REC TO CLEAR. Press REC within six seconds and that layer is erased. Turning left or waiting lets it go (the screen says CANCELLED, and a REC pressed just after does nothing), so a knob turned by accident never erases anything |
 
 A new layer always starts at the same level, whatever the layer before it in that place was set to. REDO keeps the level you set. When all eight are used, new
 notes go on layer 8.
@@ -233,24 +233,35 @@ Your last eight loops, kept for you. The LOOPS screen lists them, newest first, 
 | Knob | What it does |
 | --- | --- |
 | LOOP | Turn to a loop and it starts playing |
-| DELETE | Turn right, then press REC within three seconds: that loop is taken out of the library |
+| DELETE | Turn right, then press REC within six seconds: that loop is taken out of the library |
 
-### CHORDS (GLO twice)
+### The CHORDS screen
 
-The harmony under everything, always in the KEY and MOOD on SETUP. The studio screen's wheel shows the chord
-playing.
+Press SEQ until it shows, or GLO twice. It has three pages: turn SELECT to go between them, and the tabs at the top
+show where you are. On each, the keys do something different:
+
+- **SIMPLE** shapes the chords of the key. The keys pick up to four of them for your own progression.
+- **BUILD** makes a progression of any chords at all. The keys set each chord's root.
+- **PLAY** plays chords live. Each key plays a whole chord.
+
+HOME, SEL, ENV and FX take you back to the screen you came from, and LFO to the loops. GLO from SETUP, or SEQ, comes back to the CHORDS page you left.
+
+### SIMPLE
+
+The harmony under everything, in the KEY and MOOD on SETUP: for sadder or brighter chords, change MOOD there. The
+screen shows the chord playing, the path and how the chords change.
 
 | Knob | What it does |
 | --- | --- |
-| CHORD | AUTO lets the scene choose. Turn it to I to VII and the music moves to that chord of the key, then stays there. In C major, IV is F and VI is A minor. Playing doesn't move a chord you picked |
+| CHORD | AUTO lets the scene choose. Turn it to I to VII and the music moves to that chord of the key, then stays there. In C major, IV is F and VI is A minor. Playing doesn't move a chord you picked, and while it is held PATH and BUILD wait: turning PATH sets CHORD back to AUTO |
 | CHANGE | How often the chords move by themselves: STILL (they don't), SLOW, NORMAL or OFTEN |
-| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. MINE is your own, played on the keys (below) |
+| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. MINE is your own, played on the keys (below). BUILT is the one you make on the BUILD screen |
 | COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a whole tone above the root in place of the 3rd, airy. SUS and OPEN only change a chord where the key has that note, so they never clash |
 
 **Your own progression**: on this page the keys pick chords instead of playing notes. Tap up to four keys in a
 row: each one is the chord built on that note of the key (a note outside the key counts as the one below it), and the
-music moves to it so you hear it. PATH turns to MINE and plays them in turn, CHANGE setting how long each lasts. Pause
-for a few seconds and the next tap starts a new progression. In C major, tapping C, A, F and G plays I vi IV V. It is
+music moves to it so you hear it. PATH turns to MINE and plays them in turn, CHANGE setting how long each lasts. The
+screen names them and lights the one playing. Pause for six seconds and the next tap starts a new progression. In C major, tapping C, A, F and G plays I vi IV V. It is
 kept with your settings, so turning PATH away and back to MINE finds it again.
 
 LOFI changes chord on the next bar, so it stays in time with the beat. SCAPES and DRIFT drift into it within a second.
@@ -258,6 +269,43 @@ LOFI changes chord on the next bar, so it stays in time with the beat. SCAPES an
 **Two chords, slowly**: CHANGE to SLOW, PATH to DRONE.
 
 **Stay on one**: CHORD to VI for a minor, wistful hold. Turn it to IV later for a lift.
+
+### BUILD
+
+A progression of any chords, in the key or not: Cm7 to Ebdim7 to Abmaj7, say. Up to eight chords, each with its
+own type and length. The page shows them in two rows: the one you chose has a ring, the one playing a line under it.
+The first change you make turns PATH to BUILT, so you hear it.
+
+| Control | What it does |
+| --- | --- |
+| Keys | Set the ringed chord's root, as the chord the key has on that note (one off the key is major). Tap again within six seconds, or turn a knob and then tap, and it goes on to the next chord: the screen says NEXT KEY. So you can play a progression in and colour each chord as you go. Played in from chord 1 and then left alone, it ends where you stopped: C, Am and F leave three chords. Turn CHORD instead and the rest stay |
+| CHORD | Picks a chord. One past the last is a new one (+) |
+| ROOT | The chosen chord's root, any of the twelve notes |
+| TYPE | maj, m, 7, maj7, m7, 6, m6, 9, m9, maj9, add9, sus2, sus4, 7sus4, dim, dim7, m7b5, 7b5, aug |
+| LENGTH | How long it lasts, against the scene's own chord length: 1/2x, 1x, 2x or 4x. CHANGE still scales them all. Turn it fully left, past 1/2x, and it shows REMOVE? and the screen asks REMOVE Cm7?; press REC within six seconds and the chord is taken out. One always stays |
+
+The roots stay what you set when you change the KEY.
+
+Chords outside the key bend everything else to fit: the melodies and the keys you play (SNAP SCALE) use the key with
+the fewest notes changed to hold the chord, and HARMONY adds the chord's own notes. So with an Ebdim7 in C major they play Eb and Gb in place of E
+and G, and nothing clashes with it. Notes you play don't pull a BUILT progression to another chord; PLAY with FOLLOW does, until the next change.
+
+
+### PLAY
+
+Each key plays a whole chord, as a chord instrument does. With TYPE on KEY every key plays the key's own chord on
+that note, so every chord fits the key. Turn TYPE to a kind and every key plays that kind, for parallel
+chords. The chord you last played shows big in the middle. In LISTEN the chords go into the loop like any notes.
+
+| Knob | What it does |
+| --- | --- |
+| TYPE | KEY: the key's own 7th chord on each note (a note off the key plays major). Or one kind for every key: maj, m, 7, maj7 and the rest, as on BUILD |
+| VOICING | How the notes are spread. CLOSE: stacked over the root. OPEN: the root an octave down and the rest over two octaves. WIDE: the root down, then the 3rd and 7th (a three-note chord's 5th, an octave up) and the 9th or 5th above, airy. SMOOTH: the root down and the rest kept close to the last chord, so a progression flows |
+| STRUM | 0 plays the notes together. Turn it up and they roll in from the bottom, slower the higher it is |
+| FOLLOW | ON: the music moves to the chord you play, as on SIMPLE's keys, unless SIMPLE's CHORD holds one or ARP has frozen it. OFF: it keeps its own chords and yours play over them |
+
+**Play a progression by hand**: PLAY, TYPE on KEY, VOICING on SMOOTH, STRUM about 20. Play C, A, F and G one after
+the other and hold each for a while: the music follows you.
 
 ### SETUP (GLO)
 
@@ -329,7 +377,7 @@ A recording stops by itself after 60 seconds. A loop holds 96 notes; past that, 
 The loop keeps playing when you press PLAY to stop the music, so you can play over silence. HOLD's notes are not
 looped.
 
-## The three screens
+## The four screens
 
 Press SEQ.
 
@@ -344,9 +392,11 @@ loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bott
 
 **Loops**: the looper on its own, with only the loop pages. See [The LOOPS screen](#the-loops-screen).
 
+**Chords**: the harmony, with SIMPLE, BUILD and PLAY. See [The CHORDS screen](#the-chords-screen).
+
 ## MIDI
 
-Over USB, the keys send notes on channel 1, and notes from the computer play like the keys.
+Over USB, the keys send notes on channel 1, and notes from the computer play like the keys (single notes, also on PLAY).
 
 ## Recipes
 

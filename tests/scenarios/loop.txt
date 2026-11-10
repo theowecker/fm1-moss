@@ -22,6 +22,7 @@ wait 200
 shot loop-studio.png
 tap SEQ
 tap SEQ
+tap SEQ
 # a second phrase after a pause lands on its own track
 wait 500
 tapkey 9
@@ -36,6 +37,7 @@ wait 200
 expect view 2
 expect tracks 3
 shot tracks.png
+tap SEQ
 tap SEQ
 press REC
 wait 1600
