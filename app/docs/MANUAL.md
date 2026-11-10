@@ -26,7 +26,7 @@ picks up what you play.
 | HOME | The HOME page |
 | SEL | The MIX page. Press again for BEAT |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
-| LFO | The LOOP page. Press again for SHAPE, TAPE, then LIBRARY |
+| LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
 | FX | The FX page. Press again for MOTION |
 | GLO | The SETUP page |
 | K1 to K4 | The four knobs of the page you are on |
@@ -163,13 +163,36 @@ To play over a loop without adding to it, switch TAP to PLAY.
 
 In HOLD the keys don't loop, so REC has nothing to record.
 
-### LOOP (LFO)
+### The LOOPS screen
+
+LFO opens it, or press SEQ until it shows. It has the four loop pages and nothing else: turn SELECT to go through
+LAYERS, SHAPE, TAPE and LIBRARY, and the tabs at the top show where you are. Any other page button takes you back
+to the screen you came from.
+
+Under the tabs, the looper says what it is doing and what to do next:
+
+- **LISTENING** (the dot pulses): TAP is on LISTEN and it is waiting for you. Play and a loop starts by itself.
+- **RECORDING LAYER 1** (red): it is taking down what you play. Stop playing and it loops.
+- **ADDING LAYER 2** (red): you are playing over the loop. Pause and the phrase joins as its own layer.
+- **FADING** or **KEPT**: the loop is playing. The line under it takes turns with tips: tap REC to keep it, tap
+  again to let it fade, hold REC for a new loop.
+
+The lanes are the layers, the dots are their notes and the line is the playhead. On the right, each layer's level,
+OFF, or - when it is empty. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
+
+**One loop, then another**: play a phrase, let it loop, keep it if you like. When you want something new, hold REC.
+The old loop stays in the library and the next thing you play starts a new one.
+
+### LAYERS (LFO)
 
 ![](img/loop-page.png)
 
-The loop's layers, one knob each: K1 is layer 1, K2 layer 2, and so on. Turn a layer down to switch it off and back
-up to bring it back. A layer with nothing on it shows -. Press SEQ until the LOOPS screen to see the layers as lanes
-of dots.
+One knob per layer: K1 is layer 1, K2 layer 2, and so on.
+
+- Turn a layer down to OFF to mute it, and back up to bring it back.
+- Keep turning down past OFF and the knob says CLEAR: a few more clicks and that layer is erased, so the next phrase
+  you play can go there.
+- A new layer always starts at the same level, even where one was turned off before.
 
 ### SHAPE (LFO again)
 
@@ -272,8 +295,7 @@ loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bott
 
 ![](img/studio.png)
 
-**Loops**: the loop's four layers as lanes of dots with the playhead running across them, what REC will do next,
-and the library with what each loop holds.
+**Loops**: the looper on its own, with only the loop pages. See [The LOOPS screen](#the-loops-screen).
 
 ## MIDI
 

@@ -12,7 +12,7 @@
 /* SELECT walks them in this order: the sound, its rhythm, the keys, the loops, then the setup */
 enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_BEAT, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_SETUP, NPAGES };
 enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, NVIEWS };
-static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "BEAT", "KEYS", "LOOP", "SHAPE", "TAPE", "LIBRARY",
+static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "BEAT", "KEYS", "LAYERS", "SHAPE", "TAPE", "LIBRARY",
                                               "SETUP"};
 static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_SEL, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_GLO};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
@@ -32,6 +32,9 @@ static const uint8_t PAGE_STEPS[NPAGES][4] = {
  * than a nudge, and the gauge shows how close it is */
 #define CONFIRM_SHORT 2
 #define CONFIRM_LONG 6
+#define CONFIRM_CLEAR 4                  /* detents past OFF that clear a layer */
+#define LAYER_LVL 70                     /* a layer's level when it is new */
+static int loop_page(int p) { return p >= PG_LOOP && p <= PG_LIBRARY; }
 static void lib_load(int i);
 static void lib_delete(int i);
 static const uint8_t SLEEP_MIN[] = {0, 10, 20, 30, 45, 60, 90};
@@ -184,6 +187,8 @@ void app_init(void)
             if (slots.s[i].n > MS_SLOT_EVENTS)
                 slots.s[i].n = 0;
     }
+    if (loop_page(set.page) != (set.view == VIEW_LOOPS))
+        set.page = set.view == VIEW_LOOPS ? PG_LOOP : PG_HOME;
     send_all();
 }
 
@@ -215,6 +220,9 @@ static struct {
     uint8_t confirm[4];                  /* detents turned so far on an acting knob */
     uint32_t confirm_t;
     uint32_t seq_t;
+    uint8_t view_before, page_before;    /* where the LOOPS screen was opened from, to go back to */
+    uint8_t tracks_seen;                 /* ms_vis.lp_tracks last frame: a layer appearing gets its level back */
+    uint32_t off_at[4];                  /* when each layer was turned to OFF */
     uint8_t save_long;                   /* SAVE held long enough to reset on release */
     int8_t slot_save;                    /* the library entry a snapshot is on its way to, -1 none */
     int8_t lib_cur;                      /* the entry the playing loop is kept in, -1 none */
@@ -336,7 +344,7 @@ static void knob_text(int i, char *t)
         else if (ui.track_lvl[i])
             int_text(ui.track_lvl[i], t);
         else
-            text_cat(t, "OFF");
+            text_cat(t, ui.confirm[i] ? "< CLEAR" : "OFF");
         return;
     }
     if (set.page == PG_LIBRARY) {
@@ -392,15 +400,70 @@ static void sleep_set(int idx)
     ms_sleep_fade(1.0f);
 }
 
+static void layer_name(int i, char *t)
+{
+    t[0] = 0;
+    text_cat(t, "LAYER ");
+    t[6] = (char)('1' + i);
+    t[7] = 0;
+}
+
+/* LAYERS: each knob a layer's level. Down to OFF mutes it; keep turning down and it is cleared */
+static int layer_turn(int i, int32_t d)
+{
+    char t[12];
+    int used = ms_vis.lp_tracks >> i & 1u;
+    layer_name(i, t);
+    if (!used) {
+        app_say(t, "EMPTY. PLAY TO FILL IT");
+        return 1;
+    }
+    if (ui.track_lvl[i] == 0 && d < 0) {
+        if (plat_ms() - ui.off_at[i] < 400u)   /* a quick spin down stops at OFF; clearing takes a second turn */
+            return 1;
+        ui.confirm_t = plat_ms();
+        ui.confirm[i] = (uint8_t)clamp(ui.confirm[i] - d, 0, CONFIRM_CLEAR);
+        if (ui.confirm[i] < CONFIRM_CLEAR) {
+            app_say(t, "TURN MORE TO CLEAR");
+            return 1;
+        }
+        ui.confirm[i] = 0;
+        ms_track(i, -2);
+        ui.track_lvl[i] = LAYER_LVL;
+        ms_track(i, LAYER_LVL);
+        app_say(t, "CLEARED");
+        return 1;
+    }
+    ui.confirm[i] = 0;
+    ui.track_lvl[i] = (uint8_t)clamp(ui.track_lvl[i] + 2 * d, 0, 100);
+    ms_track(i, ui.track_lvl[i]);
+    if (ui.track_lvl[i] == 0) {
+        ui.off_at[i] = plat_ms();
+        app_say(t, "OFF");
+        return 1;
+    }
+    return 0;
+}
+
+/* a layer recorded where one was turned off or cleared starts at its usual level, so it is heard */
+static void tracks_tick(void)
+{
+    uint8_t now = ms_vis.lp_tracks, born = (uint8_t)(now & ~ui.tracks_seen);
+    int i;
+    for (i = 0; i < 4; i++)
+        if (born >> i & 1u && ui.track_lvl[i] == 0) {
+            ui.track_lvl[i] = LAYER_LVL;
+            ms_track(i, LAYER_LVL);
+        }
+    ui.tracks_seen = now;
+}
+
 /* the LOOP page: a layer's level a knob (down is off); the LIBRARY page: K1 plays a loop, K4 deletes one; SHAPE's
  * SHIFT moves the whole loop. 1 = it spoke for itself */
 static int pages_act(int i, int32_t d)
 {
-    if (set.page == PG_LOOP) {
-        ui.track_lvl[i] = (uint8_t)clamp(ui.track_lvl[i] + 2 * d, 0, 100);
-        ms_track(i, ui.track_lvl[i]);
-        return 0;
-    }
+    if (set.page == PG_LOOP)
+        return layer_turn(i, d);
     if (set.page == PG_SHAPE) {          /* SHIFT: the loop a sixteenth later or earlier a click */
         int32_t n = d < 0 ? -d : d, t;
         if (ms_vis.lp_state == MS_LOOP_EMPTY) {
@@ -507,10 +570,18 @@ static void scene_step(int32_t d)
     app_say(MS_MODE_NAME[m], ms_scene(m, set.scene[m])->name);
 }
 
+/* the loop pages live on the LOOPS screen: going to one opens it, going elsewhere goes back to where it was opened */
 static void page_set(int p)
 {
+    if (loop_page(p) && set.view != VIEW_LOOPS) {
+        ui.view_before = set.view;
+        ui.page_before = set.page;
+        set.view = VIEW_LOOPS;
+    } else if (!loop_page(p) && set.view == VIEW_LOOPS) {
+        set.view = ui.view_before == VIEW_LOOPS ? VIEW_STUDIO : ui.view_before;
+    }
     set.page = (uint8_t)p;
-    ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
+    ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
     ui.confirm_t = 0;
     ui.redraw = 1;
     app_say(PAGE_NAME[p], "");
@@ -825,10 +896,20 @@ static void input(void)
     if (ui.seq_t && !(btn >> B_SEQ & 1u)) {   /* SEQ: a press switches the view; held with keys, loads slots */
         ui.seq_t = 0;
         {
-            set.view = (uint8_t)((set.view + 1u) % NVIEWS);
+            int next = (set.view + 1) % NVIEWS;
+            if (next == VIEW_LOOPS) {    /* the LOOPS screen has the loop pages only */
+                ui.view_before = set.view;
+                ui.page_before = set.page;
+                set.page = PG_LOOP;
+            } else if (set.view == VIEW_LOOPS) {
+                set.page = loop_page(ui.page_before) ? PG_HOME : ui.page_before;
+            }
+            set.view = (uint8_t)next;
+            ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
             set_dirty = 1;
             ui.label_until = now + 3000u;
-            app_say(set.view == VIEW_SCENE ? "PICTURE" : set.view == VIEW_STUDIO ? "STUDIO" : "LOOPS", "");
+            app_say(set.view == VIEW_SCENE ? "PICTURE" : set.view == VIEW_STUDIO ? "STUDIO" : "LOOPS",
+                    set.view == VIEW_LOOPS ? "SELECT FOR MORE" : "");
         }
     }
     if (ui.save_t) {                     /* SAVE: a tap saves; held two seconds and let go, resets the scene */
@@ -854,7 +935,7 @@ static void input(void)
             if (now - ui.arp_t >= 1000u) {
                 ui.arp_t = 0;
                 ms_loop(1);
-                app_say("LOOP", "CLEARED");
+                app_say("CLEARED", ui.lib_cur >= 0 ? "IT STAYS IN THE LIBRARY" : "");
             }
         } else {
             uint32_t st = ms_vis.lp_state;
@@ -877,8 +958,14 @@ static void input(void)
         space_step(e);
     if ((e = plat_enc(EN_PRESET)) != 0)
         scene_step(e);
-    if ((e = plat_enc(EN_SELECT)) != 0)
-        page_set((set.page + e % NPAGES + NPAGES) % NPAGES);
+    if ((e = plat_enc(EN_SELECT)) != 0) {
+        if (set.view == VIEW_LOOPS) {
+            int n = PG_LIBRARY - PG_LOOP + 1;
+            page_set(PG_LOOP + ((set.page - PG_LOOP + e) % n + n) % n);
+        } else {
+            page_set((set.page + e % NPAGES + NPAGES) % NPAGES);
+        }
+    }
     for (k = 0; k < 4u; k++)
         if ((e = plat_enc(EN_K1 + (int)k)) != 0)
             knob_turn((int)k, e);
@@ -950,7 +1037,7 @@ void app_ui_init(void)
 {
     static int started;
     if (!started) {
-        ui.track_lvl[0] = ui.track_lvl[1] = ui.track_lvl[2] = ui.track_lvl[3] = 70;
+        ui.track_lvl[0] = ui.track_lvl[1] = ui.track_lvl[2] = ui.track_lvl[3] = LAYER_LVL;
         ui.slot_save = -1;
         ui.lib_cur = ui.lib_load_idx = -1;
         ui.lib_gen = ms_vis.lp_gen;                      /* also called after an aborted update: keep play and sleep state */
@@ -980,11 +1067,12 @@ void app_frame(void)
         ui.redraw = 1;
     }
     track_events(now);
+    tracks_tick();
     xfer_done();
     lib_tick(now);
     if (ui.confirm_t && now - ui.confirm_t > 1500u) {   /* a half turn left alone does not count later */
         ui.confirm_t = 0;
-        ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
+        ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
         ui.redraw = 1;
     }
     export_tick();

@@ -29,14 +29,12 @@ wait 300
 tapkey 12
 wait 3000
 expect tracks 3
-# the LOOP page: a track's level all the way down silences it
+# LFO opens the LOOPS screen on LAYERS: a layer turned all the way down is silenced
 tap LFO
 turn K2 -40
-wait 50
-tap SEQ
-tap SEQ
 wait 200
 expect view 2
+expect tracks 3
 shot tracks.png
 tap SEQ
 press REC

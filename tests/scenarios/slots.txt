@@ -34,11 +34,8 @@ turn K1 1
 wait 200
 expect libcur 1
 expect loopn 2
-tap SEQ
-tap SEQ
 wait 200
 shot slots-page.png
-tap SEQ
 tap SAVE
 wait 100
 reboot
@@ -49,10 +46,8 @@ sysex_out
 sysex F0 7D 4D 4F 01 F7
 wait 200
 expect_sysex F0 7D 4D 4F 03 F7
-tap LFO
-tap LFO
-tap LFO
-tap LFO
+expect view 2
+expect page 9
 turn K1 -8
 wait 200
 turn K1 1

@@ -1,0 +1,52 @@
+# the LOOPS screen: only the loop pages, SELECT turns through them, a layer turned down past OFF is cleared
+wait 600
+tap SEQ
+tap SEQ
+wait 100
+expect view 2
+expect page 6
+shot ls-listening.png
+key 7 down
+wait 200
+shot ls-recording.png
+key 7 up
+tapkey 9
+wait 200
+tapkey 11
+wait 3500
+expect loop 2
+expect tracks 1
+shot ls-playing.png
+turn SELECT 1
+wait 50
+expect page 7
+shot ls-shape.png
+turn SELECT 2
+wait 50
+expect page 9
+shot ls-library.png
+turn SELECT 1
+wait 50
+expect page 6
+turn K1 -40
+wait 500
+expect tracks 1
+shot ls-off.png
+turn K1 -2
+wait 50
+shot ls-clear.png
+turn K1 -2
+wait 100
+expect tracks 0
+tap HOME
+wait 50
+expect view 1
+expect page 0
+tap LFO
+wait 50
+expect view 2
+expect page 6
+tap SEQ
+wait 50
+expect view 0
+expect page 0

@@ -56,7 +56,8 @@ static void studio_header(uint32_t now)
     text_cat(t, MS_MOOD_NAME[set.mood[set.mode]]);
     text_cat(t, "  ");
     text_cat(t, MS_SPACE_NAME[set.space]);
-    cv_text(w + 12, 25, &FONT_T, t, ST_SOFT);
+    if ((int32_t)(ui.msg_until - now) <= 0)
+        cv_text(w + 12, 25, &FONT_T, t, ST_SOFT);
     if (set.mode != MODE_SCAPES) {
         int beat = (ms_vis.step & 3u) == 0u && ui.playing;
         int_text(set.tempo[set.mode], t);
@@ -214,8 +215,9 @@ static void studio_knobs(void)
     rgb_t acc = MODE_ACCENT[set.mode];
     fill(6, 172, 228, 1, ST_LINE);
     cv_text(8, 176, &FONT_T, PAGE_NAME[set.page], ST_SOFT);
-    for (i = 0; i < NPAGES; i++)
-        disc(232 - (NPAGES - 1 - i) * 7, 182, 2, i == set.page ? c565(acc) : ST_DIM);
+    if (set.view != VIEW_LOOPS)
+        for (i = 0; i < NPAGES; i++)
+            disc(232 - (NPAGES - 1 - i) * 7, 182, 2, i == set.page ? c565(acc) : ST_DIM);
     if (set.sleep && ui.sleep_start) {
         uint32_t left = SLEEP_MIN[set.sleep] * 60000u - (plat_ms() - ui.sleep_start);
         int_text((int32_t)(left / 60000u + 1u), t);
@@ -239,55 +241,178 @@ static void studio_knobs(void)
     }
 }
 
-/* the LOOP pages: a lane per track, its notes as dots, the playhead across them */
-/* the LOOPS screen: the loop's four tracks as lanes of dots with the playhead, then the eight slots */
-static void loops_view(uint32_t now)
+/* the LOOPS screen: the loop pages as tabs, what the looper is doing and what to do next, a lane per layer, then
+ * the library or a tip for the page */
+static void loops_tabs(rgb_t acc)
 {
-    int32_t t, b, i, x0 = 24, w = 200, px = x0 + (int32_t)((float)w * ms_vis.lp_pos);
-    rgb_t acc = MODE_ACCENT[set.mode], bg = CI(16, 18, 28);
-    char n[24], v[8];
-    for (t = 0; t < 4; t++) {
-        int32_t y = 52 + t * 15;
-        int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
-        int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC) && ms_vis.lp_track == t;
-        uint16_t c = rec ? RGB(240, 96, 96) : !used ? ST_DIM : muted ? c565(mix(bg, acc, 80)) : c565(acc);
-        n[0] = (char)('1' + t);
-        n[1] = 0;
-        cv_text(10, y - 6, &FONT_T, n, c);
-        fill(x0, y, w, 1, ST_LINE);
-        for (b = 0; b < 32; b++)
-            if (ms_vis.lp_dots[t] >> b & 1u)
-                disc(x0 + 2 + b * (w - 4) / 31, y, muted ? 1 : 2, c);
+    static const char *const TAB[4] = {"LAYERS", "SHAPE", "TAPE", "LIBRARY"};
+    int32_t i;
+    for (i = 0; i < 4; i++) {
+        int32_t cx = 30 + i * 60, w = text_w(&FONT_T, TAB[i]);
+        int on = set.page == PG_LOOP + i;
+        if (on)
+            pill(cx - w / 2 - 6, 40, w + 12, 14, c565(acc));
+        cv_text(cx - w / 2, 41, &FONT_T, TAB[i], on ? ST_BG : ST_DIM);
     }
-    if (ms_vis.lp_state == MS_LOOP_PLAY || ms_vis.lp_state == MS_LOOP_DUB)
-        fill(px, 44, 1, 62, ST_TEXT);
-    centred(108, &FONT_T, ms_vis.lp_state == MS_LOOP_EMPTY ? "TAP REC TO RECORD"
-                          : ms_vis.lp_state == MS_LOOP_PLAY ? (ms_vis.lp_keep ? "KEPT. HOLD REC TO CLEAR" : "FADING. TAP REC TO KEEP")
-                          : ms_vis.lp_state == MS_LOOP_REC ? "TAP REC TO LOOP" : "TAP REC WHEN DONE", ST_SOFT);
-    for (i = 0; i < NSLOTS; i++) {               /* the slots, two columns of four */
-        int32_t x = 6 + (i / 4) * 116, y = 124 + (i % 4) * 12;
+}
+
+/* the looper's state in a few words, and the one thing to do next */
+static void loops_status(uint32_t now, const char **state, const char **hint, uint16_t *c, int *blink)
+{
+    static char st[24];
+    int tap = set.keys[3], lp = (int)ms_vis.lp_state, free_layer = -1, i;
+    for (i = 0; i < 4; i++)
+        if (!(ms_vis.lp_tracks >> i & 1u)) {
+            free_layer = i;
+            break;
+        }
+    *c = c565(MODE_ACCENT[set.mode]);
+    *blink = 0;
+    st[0] = 0;
+    if (lp == MS_LOOP_EMPTY) {
+        *state = tap == 2 ? "HOLD: NO LOOPING" : tap == 1 ? "LISTENING" : "READY";
+        *hint = tap == 2 ? "SET TAP TO LISTEN TO LOOP" : tap == 1 ? "PLAY AND IT LOOPS BY ITSELF" : "TAP REC, PLAY, TAP REC";
+        *blink = tap == 1;
+        if (tap == 2)
+            *c = ST_SOFT;
+        return;
+    }
+    if (lp == MS_LOOP_REC || lp == MS_LOOP_DUB) {
+        text_cat(st, lp == MS_LOOP_REC ? "RECORDING LAYER " : "ADDING LAYER ");
+        i = text_len(st);
+        st[i] = (char)('1' + ms_vis.lp_track);
+        st[i + 1] = 0;
+        *state = st;
+        *hint = tap == 1 ? (lp == MS_LOOP_REC ? "STOP PLAYING AND IT LOOPS" : "PAUSE AND IT JOINS THE LOOP")
+                         : (lp == MS_LOOP_REC ? "TAP REC TO LOOP IT" : "TAP REC WHEN DONE");
+        *c = RGB(240, 96, 96);
+        *blink = 2;
+        return;
+    }
+    *state = ms_vis.lp_keep ? "KEPT" : "FADING";
+    if (tap == 1) {                       /* listening over a loop: the next phrase is a new layer */
+        text_cat(st, ms_vis.lp_keep ? "KEPT. LISTENING" : "FADING. LISTENING");
+        *state = st;
+        *blink = 1;
+    }
+    switch (now / 3000u % 3u) {           /* the tips take turns */
+    case 0:
+        *hint = free_layer < 0 ? "LAYERS FULL. CLEAR ONE ON LAYERS"
+              : tap == 1 ? "PLAY TO ADD A LAYER" : "TAP REC TO KEEP OR LET FADE";
+        break;
+    case 1:
+        *hint = ms_vis.lp_keep ? "TAP REC TO LET IT FADE" : "TAP REC TO KEEP IT";
+        break;
+    default:
+        *hint = "HOLD REC FOR A NEW LOOP";
+        break;
+    }
+}
+
+static void loops_lane(int32_t t, int32_t y, uint32_t now, rgb_t acc)
+{
+    static const rgb_t WORN = CI(150, 120, 90);
+    int32_t x0 = 22, w = 180, b, x;
+    int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
+    int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC) && ms_vis.lp_track == t;
+    int32_t amp = set.tape[0] * 3 / 100;  /* WARBLE bends the lane, AGE browns the notes */
+    rgb_t dot = mix(acc, WORN, (int32_t)set.tape[2] * 200 / 100);
+    uint16_t c = rec ? RGB(240, 96, 96) : !used ? ST_DIM : muted ? c565(mix(C(16, 18, 28), dot, 80)) : c565(dot);
+    char n[8];
+    n[0] = (char)('1' + t);
+    n[1] = 0;
+    cv_text(8, y - 6, &FONT_T, n, c);
+    for (x = 0; x < w; x += 2) {
+        int32_t p = (int32_t)((x + (int32_t)(now / 40u)) & 31), tri = p < 16 ? p : 31 - p;
+        fill(x0 + x, y + (amp ? (tri - 8) * amp / 8 : 0), 2, 1, ST_LINE);
+    }
+    for (b = 0; b < 32; b++)
+        if (ms_vis.lp_dots[t] >> b & 1u)
+            disc(x0 + 2 + b * (w - 4) / 31, y, muted ? 1 : 2, c);
+    n[0] = 0;
+    if (rec)
+        text_cat(n, "REC");
+    else if (!used)
+        text_cat(n, "-");
+    else if (ui.track_lvl[t])
+        int_text(ui.track_lvl[t], n);
+    else
+        text_cat(n, ui.confirm[t] ? "CLEAR" : "OFF");
+    cv_text(234 - text_w(&FONT_T, n), y - 6, &FONT_T, n, rec ? c : used ? ST_TEXT : ST_DIM);
+}
+
+static void loops_library(rgb_t acc)
+{
+    int32_t i;
+    char n[16], v[8];
+    for (i = 0; i < NSLOTS; i++) {               /* two rows of four: number and length */
+        int32_t x = 4 + (i % 4) * 59, y = 146 + (i / 4) * 13;
         const ms_slot_t *sl = &slots.s[i];
-        if (set.page == PG_LIBRARY && i == ui.sel_slot)
-            pill(x - 2, y - 1, 112, 12, ST_LINE);
+        if (i == ui.sel_slot)
+            pill(x, y - 1, 56, 13, ST_LINE);
         n[0] = i == ui.lib_cur ? '>' : (char)('1' + i);   /* > the loop playing now */
         n[1] = 0;
         cv_text(x + 4, y, &FONT_T, n, sl->n ? c565(acc) : ST_DIM);
         n[0] = 0;
         if (sl->n) {
-            int_text(sl->n, n);
-            text_cat(n, " NOTES ");
-            int_text(sl->len_ms / 1000u, v);
-            text_cat(n, v);
+            int_text(sl->len_ms / 1000u, n);
             text_cat(n, ".");
             int_text(sl->len_ms / 100u % 10u, v);
             text_cat(n, v);
             text_cat(n, "S");
         } else {
-            text_cat(n, "EMPTY");
+            text_cat(n, "-");
         }
-        cv_text(x + 18, y, &FONT_T, n, sl->n ? ST_TEXT : ST_DIM);
+        cv_text(x + 16, y, &FONT_T, n, sl->n ? ST_TEXT : ST_DIM);
     }
-    (void)now;
+}
+
+static void loops_view(uint32_t now)
+{
+    static const char *const TIP[3][2] = {
+        {"TURN A LAYER DOWN TO MUTE IT", "PAST OFF IT IS CLEARED"},
+        {"FADE AND MUTATE: EACH TIME ROUND", "SHIFT NUDGES IT A 16TH"},
+        {"THE TAPE CHANGES ONLY THE LOOP", "NOT THE REST OF THE MUSIC"},
+    };
+    rgb_t acc = MODE_ACCENT[set.mode];
+    const char *state, *hint;
+    uint16_t c;
+    int blink;
+    int32_t t, px = 22 + (int32_t)(180.0f * ms_vis.lp_pos);
+    char n[24];
+    loops_tabs(acc);
+    loops_status(now, &state, &hint, &c, &blink);
+    if (!blink || (blink == 1 ? (now / 600u & 1u) : (now / 250u & 1u)))
+        disc(12, 64, 3, c);
+    cv_text(22, 58, &FONT_T, state, c);
+    n[0] = 0;
+    if (ms_vis.lp_state == MS_LOOP_PLAY || ms_vis.lp_state == MS_LOOP_DUB) {
+        int bars = set.mode == MODE_LOFI || set.beat[set.mode][0];
+        if (bars) {
+            int32_t nb = (int32_t)(ms_vis.lp_len * (float)set.tempo[set.mode] / 240.0f + 0.5f);
+            int_text(nb, n);
+            text_cat(n, nb == 1 ? " BAR" : " BARS");
+        } else {
+            int_text((int32_t)ms_vis.lp_len, n);
+            text_cat(n, "S");
+        }
+        if (set.loop[3] != 1) {
+            text_cat(n, " ");
+            text_cat(n, SPEED_NAME[set.loop[3]]);
+        }
+    }
+    cv_text(234 - text_w(&FONT_T, n), 58, &FONT_T, n, ST_SOFT);
+    for (t = 0; t < 4; t++)
+        loops_lane(t, 84 + t * 12, now, acc);
+    if (ms_vis.lp_state == MS_LOOP_PLAY || ms_vis.lp_state == MS_LOOP_DUB)
+        fill(px, 76, 1, 50, ST_TEXT);
+    centred(130, &FONT_T, hint, ST_TEXT);
+    if (set.page == PG_LIBRARY) {
+        loops_library(acc);
+        return;
+    }
+    centred(145, &FONT_T, TIP[set.page - PG_LOOP][0], ST_SOFT);
+    centred(156, &FONT_T, TIP[set.page - PG_LOOP][1], ST_SOFT);
 }
 
 static void studio_draw(uint32_t now)
