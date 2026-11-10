@@ -349,6 +349,13 @@ void app_init(void)
     send_all();
 }
 
+/* a save's flash write stops the audio, and the output then repeats what it last had: so the sound fades out first,
+ * a few blocks of silence go out, the save is done, and it fades back in */
+static volatile float out_g = 1.0f;
+static volatile uint8_t out_mute;
+static volatile uint32_t out_silent;   /* blocks rendered silent since the fade ended */
+static volatile uint32_t shed_hold;    /* blocks left in which a late render is the save's doing, not a load to shed */
+
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     uint32_t pkt;
@@ -361,10 +368,32 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             ms_note_now((int)d1, 0);
     }
     ms_render(lr, n, master_q12);
+    if (shed_hold)
+        shed_hold--;
+    if (out_mute || out_g < 1.0f) {
+        float g = out_g, to = out_mute ? 0.0f : 1.0f;
+        uint32_t i;
+        for (i = 0; i < n; i++) {        /* ~2 ms each way */
+            g += (to - g) * 0.01f;
+            if (out_mute && g < 0.001f)
+                g = 0.0f;
+            else if (!out_mute && g > 0.999f)
+                g = 1.0f;
+            lr[2 * i] = (int32_t)((float)lr[2 * i] * g);
+            lr[2 * i + 1] = (int32_t)((float)lr[2 * i + 1] * g);
+        }
+        out_g = g;
+        if (out_mute && g == 0.0f)
+            out_silent++;
+    }
 }
 
 void app_panic(void) { ms_panic(); }
-void app_overload(void) { ms_shed(); }
+void app_overload(void)
+{
+    if (!shed_hold)                      /* a save makes renders late on purpose: cutting voices then only clicks */
+        ms_shed();
+}
 
 static struct {
     char msg[2][24];
@@ -401,6 +430,7 @@ static struct {
     uint32_t quiet_t;                    /* nothing sounding since, plat_ms | 1; 0 while something does */
     uint8_t autosaved;                   /* this quiet stretch has had its save */
     uint8_t goodnight;                   /* the sleep timer faded everything out, the loop too */
+    uint8_t save_req;                    /* a save waits for the sound to fade out */
     uint32_t lib_gen, lib_snap_t;
     uint8_t xfer_busy, export_state;
     uint32_t xfer_wait, xfer_t;
@@ -1497,19 +1527,28 @@ static void page_set(int p)
 }
 
 /* settings and the loop library to the flash: the sound stops for a moment while it writes, so only on SAVE, or
- * by itself while nothing sounds (autosave_tick) */
-static void save(void)
+ * by itself while nothing sounds (autosave_tick). Asked for here, done by save_tick once the sound has faded out */
+static void save_now(void)
 {
-    int ok;
-    set.seed = set.seed * 1664525u + 1013904223u + plat_ms();
-    ok = plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0;
-    if (ok && ui.lib_dirty)
+    static settings_t stored;
+    int ok = 1, wrote = 0;               /* only what changed: each object written is a flash erase */
+    if (!set_dirty && ui.lib_dirty)      /* the page and screen move without marking: compare with the flash's */
+        set_dirty = plat_store_load(OBJ_SETTINGS, &stored, sizeof stored) != (int)sizeof stored
+                    || memcmp(&stored, &set, sizeof set) != 0;
+    if (set_dirty) {
+        set.seed = set.seed * 1664525u + 1013904223u + plat_ms();
+        ok = plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0;
+        wrote = 1;
+    }
+    if (ok && ui.lib_dirty) {
         ok = plat_store_save(OBJ_SLOTS, &slots, sizeof slots) == 0;
+        wrote = 1;
+    }
     if (ok) {
         set_dirty = 0;
         ui.lib_dirty = 0;
         ui.unsaved = 0;
-        app_say("SAVED", "SETTINGS AND LOOPS");
+        app_say(wrote ? "SAVED" : "NOTHING TO SAVE", "");
     } else {
         app_say("SAVE", "FAILED");
     }
@@ -1517,6 +1556,29 @@ static void save(void)
 
 /* the music stopped and no loop playing (or the sleep timer's fade done) for a moment: save by itself, as the flash
  * write's gap in the sound can't be heard then */
+static void save(void)
+{
+    if (ui.save_req)
+        return;
+    if (!set_dirty && !ui.lib_dirty) {   /* no fade and no erase for nothing */
+        app_say("NOTHING TO SAVE", "");
+        return;
+    }
+    ui.save_req = 1;
+    out_silent = 0;
+    shed_hold = 600;                     /* ~3.5 s of blocks: the save and the catching up after it */
+    out_mute = 1;
+}
+
+static void save_tick(void)
+{
+    if (!ui.save_req || out_silent < 6)  /* every buffer the output may repeat is silent now */
+        return;
+    save_now();
+    ui.save_req = 0;
+    out_mute = 0;
+}
+
 static void autosave_tick(uint32_t now)
 {
     int quiet = !ui.playing && (ms_vis.lp_state == MS_LOOP_EMPTY || ui.goodnight);
@@ -1904,7 +1966,7 @@ static void input(void)
                 ms_freeze(0);
                 set_dirty = 1;
                 page_set(PG_HOME);
-                app_say("EVERYTHING RESET", "SAVE TO KEEP IT");
+                app_say("EVERYTHING RESET", "PRESS SAVE TO SAVE IT");
             } else if (ui.save_long) {
                 scene_recipe(set.mode);
                 send_all();
@@ -2046,6 +2108,7 @@ void app_frame(void)
     speak();
     sleep_tick();
     autosave_tick(now);
+    save_tick();
     if (ui.msg_until && (int32_t)(now - ui.msg_until) >= 0) {
         ui.msg_until = 0;
         ui.redraw = 1;

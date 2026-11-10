@@ -425,7 +425,7 @@ static void loops_view(uint32_t now)
             int_text(ui.sel_slot + 1, n + text_len(n));
             centred(130, &FONT_T, n, RGB(240, 96, 96));
         } else if (ui.unsaved && now / 3000u & 1u) {
-            centred(130, &FONT_T, "A RED DOT: NOT SAVED. SAVE KEEPS IT", RGB(240, 96, 96));
+            centred(130, &FONT_T, "RED DOTS AREN'T SAVED. PRESS SAVE", RGB(240, 96, 96));
         } else {
             centred(130, &FONT_T, "TURN LOOP TO PLAY ONE. GLO DELETES", ST_TEXT);
         }
