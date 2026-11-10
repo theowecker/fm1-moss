@@ -504,12 +504,7 @@ static void scene_overlay(uint32_t now)
     }
     if ((int32_t)(ui.msg_until - now) > 0) {
         int32_t w;
-        t[0] = 0;
-        text_cat(t, ui.msg[0]);
-        if (ui.msg[1][0]) {
-            text_cat(t, ": ");
-            text_cat(t, ui.msg[1]);
-        }
+        msg_join(t);
         {
             const felucca_font_t *f = text_w(&FONT_B, t) > 210 ? &FONT_T : &FONT_B;   /* long ones, smaller */
             w = text_w(f, t) + 20;

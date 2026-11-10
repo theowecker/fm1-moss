@@ -5,7 +5,7 @@
   "author": "Theo Wecker",
   "license": "MPL-2.0",
   "tagline": "lofi, nature sounds and ambient loops for the FM-1",
-  "description": "Ambient firmware with three modes. LOFI plays electric piano over a slow beat with tape wobble and crackle. SCAPES plays nature sounds (forest, rain, shore, night, storm, campfire, creek) with a quiet pad. DRIFT plays pads and bells on loops of different lengths. Play the keys and the music follows you. A looper with eight layers and eight saved slots keeps what you like. A chords screen picks chords of the key, builds a progression of any chords or plays whole chords live. Thirteen spaces, six drum kits, a bass, a sleep timer and pixel art for every scene.",
+  "description": "Ambient firmware with three modes. LOFI plays electric piano over a slow beat with tape wobble and crackle. SCAPES plays nature sounds (forest, rain, shore, night, storm, campfire, creek) with a quiet pad. DRIFT plays pads and bells on loops of different lengths. Play and the music follows you, into an eight layer looper. Build chord progressions or play whole chords live, program your own drums and a bass line that follows the chords, and let scenes slowly evolve. Thirteen spaces, a sleep timer and pixel art for every scene.",
   "tags": ["ambient", "generative", "chords"],
   "install": "https://theowecker.github.io/fm1-moss/install/",
   "site": "https://theowecker.github.io/fm1-moss/",

@@ -50,3 +50,21 @@ tap SEQ
 wait 50
 expect view 0
 expect page 0
+# your own pattern is not replaced by accident: back on a preset, the first step asks, a second does it
+tap SEQ
+tap SEQ
+tap SEQ
+tap SEQ
+wait 50
+expect page 13
+turn K2 -1
+wait 50
+expect pattern 9
+turn SELECT 1
+wait 50
+tapkey 5
+wait 50
+expect pattern 9
+tapkey 5
+wait 50
+expect pattern 10

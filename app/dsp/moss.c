@@ -31,25 +31,25 @@ const uint8_t MS_NSCENES[MS_NMODES] = {4, 7, 5};
 static const ms_scene_t SCENES[MS_NMODES][MS_MAX_SCENES] = {
     {
         {"STUDY", {55, 45, 35, 40}, {70, 65, 70, 0}, 82, MOOD_MAJOR, 2, 0, 70},
-        {"RAINY", {45, 40, 30, 50}, {70, 55, 65, 42}, 72, MOOD_MINOR, 2, 0, 70},
+        {"RAINY", {45, 40, 30, 50}, {70, 55, 65, 32}, 72, MOOD_MINOR, 2, 0, 70},
         {"NIGHT", {32, 30, 40, 72}, {72, 38, 60, 0}, 62, MOOD_MAJOR, 2, 0, 55},
         {"TAPE", {50, 70, 70, 45}, {70, 65, 70, 0}, 86, MOOD_MAJOR, 2, 0, 70},
     },
     {
-        {"FOREST", {50, 60, 60, 55}, {50, 50, 50, 55}, 70, MOOD_LYDIAN, 0, 0, 0},
-        {"RAIN", {55, 30, 50, 55}, {52, 40, 52, 50}, 70, MOOD_MINOR, 0, 0, 0},
-        {"SHORE", {50, 45, 55, 60}, {55, 42, 50, 50}, 70, MOOD_MIXO, 0, 0, 0},
-        {"NIGHT", {40, 60, 45, 65}, {45, 48, 52, 45}, 70, MOOD_DORIAN, 0, 0, 0},
-        {"STORM", {65, 0, 40, 50}, {60, 0, 50, 35}, 70, MOOD_MINOR, 0, 0, 0},
-        {"HEARTH", {50, 20, 45, 45}, {52, 30, 50, 55}, 70, MOOD_MAJOR, 0, 0, 0},
-        {"CREEK", {50, 55, 60, 55}, {48, 48, 48, 55}, 70, MOOD_LYDIAN, 0, 0, 0},
+        {"FOREST", {50, 60, 60, 55}, {38, 50, 50, 55}, 70, MOOD_LYDIAN, 0, 0, 0},
+        {"RAIN", {55, 30, 50, 55}, {39, 40, 52, 50}, 70, MOOD_MINOR, 0, 0, 0},
+        {"SHORE", {50, 45, 55, 60}, {41, 42, 50, 50}, 70, MOOD_MIXO, 0, 0, 0},
+        {"NIGHT", {40, 60, 45, 65}, {34, 48, 52, 45}, 70, MOOD_DORIAN, 0, 0, 0},
+        {"STORM", {65, 0, 40, 50}, {45, 0, 50, 35}, 70, MOOD_MINOR, 0, 0, 0},
+        {"HEARTH", {50, 20, 45, 45}, {39, 30, 50, 55}, 70, MOOD_MAJOR, 0, 0, 0},
+        {"CREEK", {50, 55, 60, 55}, {36, 48, 48, 55}, 70, MOOD_LYDIAN, 0, 0, 0},
     },
     {
-        {"HALO", {45, 55, 40, 70}, {65, 65, 55, 30}, 72, MOOD_MAJOR, 0, 0, 0},
-        {"TIDE", {35, 40, 35, 75}, {70, 55, 65, 40}, 60, MOOD_DORIAN, 0, 0, 0},
-        {"GLASS", {60, 65, 55, 65}, {55, 70, 45, 25}, 84, MOOD_LYDIAN, 0, 0, 0},
-        {"DUSK", {30, 30, 25, 80}, {75, 50, 60, 35}, 52, MOOD_MINOR, 0, 0, 0},
-        {"GARDEN", {60, 65, 60, 55}, {55, 70, 45, 50}, 96, MOOD_MAJOR, 1, 4, 45},
+        {"HALO", {45, 55, 40, 70}, {65, 65, 55, 22}, 72, MOOD_MAJOR, 0, 0, 0},
+        {"TIDE", {35, 40, 35, 75}, {70, 55, 65, 30}, 60, MOOD_DORIAN, 0, 0, 0},
+        {"GLASS", {60, 65, 55, 65}, {55, 70, 45, 19}, 84, MOOD_LYDIAN, 0, 0, 0},
+        {"DUSK", {30, 30, 25, 80}, {75, 50, 60, 26}, 52, MOOD_MINOR, 0, 0, 0},
+        {"GARDEN", {60, 65, 60, 55}, {55, 70, 45, 38}, 96, MOOD_MAJOR, 1, 4, 45},
     },
 };
 
@@ -902,7 +902,8 @@ static struct {
     float level[MS_NDRUMS], chance[MS_NDRUMS];
     uint8_t bass[16];
     uint8_t len;                       /* 16, or 12 for a bar of three */
-} ub = {{0}, {0.9f, 0.9f, 0.3f, 0.7f, 0.6f, 0.7f}, {1, 1, 1, 1, 1, 1}, {0}, 16};
+    float swing;                       /* its own, from the pattern it was copied from (SWING AUTO) */
+} ub = {{0}, {0.9f, 0.9f, 0.3f, 0.7f, 0.6f, 0.7f}, {1, 1, 1, 1, 1, 1}, {0}, 16, 0.15f};
 
 static struct {
     float k_ph, k_f, k_penv, k_amp, k_pmul, k_amul, k_click;
@@ -1461,7 +1462,7 @@ static float beat_swing(void)
     if (bt.swing >= 0.0f)
         return bt.swing;
     if (bt.kit != KIT_OFF && bt.pattern == PAT_MINE)
-        return 0.15f;
+        return ub.swing;
     if (bt.kit != KIT_OFF && bt.pattern != 0)
         return PATTERNS[bt.pattern].swing;
     return st.mode == MODE_LOFI ? LOFI_STYLE[st.scene].swing : st.mode == MODE_SCAPES ? 0.08f : 0.0f;
@@ -1609,7 +1610,7 @@ static void backing_bass_step(void)
     int32_t gate = (int32_t)(sixteenth * bt.bass_len);
     if (bt.bass == BASS_MINE) {         /* the line follows the chord: its root, 3rd, 5th, 7th */
         static const int8_t TONE[MS_NBN] = {0, 0, 1, 2, 3, 0, 0};
-        int b = ub.bass[seq.step & 15u];
+        int b = ub.bass[seq.step % p.len];   /* with the drums, also over a bar of 12 */
         if (!b)
             return;
         n = b == MS_BN_STEP ? root - 1 : 36 + (st.root + hm.tones[TONE[b]]) % 12 + (b == MS_BN_OCT ? 12 : 0);
@@ -2023,9 +2024,21 @@ static void apply(void)
     reverb_params(st.frozen);
 }
 
+/* EVOLVE: a scene starts a little away from its settings, somewhere new each time, then drifts on from there */
+static void evolve_start(void)
+{
+    int i;
+    for (i = 0; i < MS_NMACRO; i++)
+        evo.off[i] = evo.target[i] = frand2() * 40.0f * evo.amount;
+    for (i = 0; i < MS_NMIX; i++)
+        evo.moff[i] = evo.mtarget[i] = frand2() * 35.0f * evo.amount;
+    evo.t = (20.0f + 140.0f * (1.0f - evo.pace)) * frand();
+}
+
 static void mode_start(void)
 {
     int i;
+    evolve_start();
     voices_release(1);
     bass.env_target = 0.0f;
     for (i = 0; i < NEVT; i++)
@@ -2213,6 +2226,7 @@ static struct {
     int track;                         /* where new notes go, 0..MS_NLAYERS - 1 */
     int redo;                          /* the layer the next phrase replaces, -1 none */
     int adding;                        /* LISTEN: a phrase going onto a playing loop, until its pause */
+    int split;                         /* REC kept the phrase: the next note starts a new layer, keys held or not */
     int keep;                          /* REC kept it: it no longer fades */
     int synced;                        /* a beat to follow: the loop is whole bars and its notes sit on the groove */
     float rec_off;                     /* where in the bar the recording began, samples */
@@ -2774,8 +2788,10 @@ void ms_note_now(int note, int vel)
             voice_release_note(h[i], SRC_KEYS);
             h[i] = -1;
         }
-    if (vel && kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0))
+    if (vel && kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0 || lp.split)) {
         lp.track = loop_phrase_track();  /* a new phrase after a pause gets its own track */
+        lp.split = 0;
+    }
     lp.quiet = 0.0f;
     if (vel) {
         key_sound(h, note, (float)vel / 127.0f, SRC_KEYS, -1, 0.0f);
@@ -2934,8 +2950,10 @@ static void live_chord(int note, int vel)
     cp.started[s] = 0;
     cp.vel[s] = (float)vel / 127.0f;
     cp.wait[s] = live_gap();
-    if (kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0))
+    if (kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0 || lp.split)) {
         lp.track = loop_phrase_track();
+        lp.split = 0;
+    }
     lp.quiet = 0.0f;
     if (kb.listen && lp.state == LP_EMPTY)
         loop_tap();
@@ -3139,6 +3157,10 @@ static void drain(void)
                 ub.len = c.b == 12 ? 12 : 16;
                 break;
             }
+            if (c.a == 47) {
+                ub.swing = u(clamp(c.b, 0, 40));
+                break;
+            }
             if (c.a >= 30 && c.a < 46) {
                 ub.bass[c.a - 30] = (uint8_t)clamp(c.b, 0, MS_NBN - 1);
                 break;
@@ -3202,6 +3224,7 @@ static void drain(void)
                     loop_close(-1);
                     lp.keep = 1;
                     lp.adding = 0;
+                    lp.split = 1;
                     lp.quiet = 3.0f * MS_SR;   /* the next note starts a new layer, as after a pause */
                 }
             } else if (c.a) {

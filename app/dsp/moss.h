@@ -96,7 +96,7 @@ int ms_loop_load(void);               /* ms_slot_xfer becomes the loop */
 /* 0 kit, 1 pattern, 3 bass: by their names below; 2 level 0..100; 4 swing (0 the pattern's own, 1..9 straight to a
  * triplet feel); the bass's 5 tone, 6 glide 0..100, 7 length in sixteenths 1..8; MINE: 10 + drum its steps (a bit
  * each, as int16), 20 + drum its level | chance << 7 (0..100 each), 30 + step the bass note there (MS_BN_*), 46
- * its length (12 or 16);
+ * its length (12 or 16), 47 its own swing 0..40 (%, for SWING AUTO);
  * 8 hear a drum now, 9 hear a bass note (MS_BN_*) on the chord now */
 void ms_beat(int i, int v);
 enum { MS_DRUM_KICK, MS_DRUM_SNARE, MS_DRUM_GHOST, MS_DRUM_HAT, MS_DRUM_OPEN, MS_DRUM_PERC, MS_NDRUMS };

@@ -65,12 +65,7 @@ static void studio_header(uint32_t now)
         disc(229, 15, 2, beat ? c565(acc) : ST_DIM);
     }
     if ((int32_t)(ui.msg_until - now) > 0) {
-        t[0] = 0;
-        text_cat(t, ui.msg[0]);
-        if (ui.msg[1][0]) {
-            text_cat(t, ": ");
-            text_cat(t, ui.msg[1]);
-        }
+        msg_join(t);
         cv_text(234 - text_w(&FONT_T, t), 25, &FONT_T, t, c565(acc));
     } else if (ms_vis.lp_state != MS_LOOP_EMPTY) {
         static const char *const ST_NAME[4] = {"", "REC", "FADING", "ADD"};
@@ -302,10 +297,11 @@ static void loops_status(uint32_t now, const char **state, const char **hint, ui
     switch (now / 3000u % 3u) {           /* the tips take turns */
     case 0:
         *hint = free_layer < 0 ? "ALL 8 LAYERS USED. GLO REMOVES ONE"
-              : tap == 1 ? "PLAY TO ADD A LAYER" : "PRESS REC TO ADD A LAYER";
+              : tap == 1 ? "PLAY TO ADD A LAYER" : tap == 2 ? "REC KEEPS IT" : "PRESS REC TO ADD A LAYER";
         break;
     case 1:
-        *hint = ms_vis.lp_keep ? "GLO UNDOES THE LAST LAYER" : "PRESS REC TO STOP IT FADING";
+        *hint = ms_vis.lp_keep && set.page != PG_LOOP ? "GLO UNDOES THE LAST LAYER"
+              : ms_vis.lp_keep ? "SHAPE AND TAPE CHANGE HOW IT SOUNDS" : "PRESS REC TO STOP IT FADING";
         break;
     default:
         *hint = "HOLD GLO TO START AGAIN";
@@ -391,7 +387,7 @@ static void loops_view(uint32_t now)
     uint16_t c;
     int blink;
     int32_t t, px = 22 + (int32_t)(160.0f * ms_vis.lp_pos);
-    char n[24];
+    char n[32];
     loops_tabs(acc);
     loops_status(now, &state, &hint, &c, &blink);
     if (!blink || (blink == 1 ? (now / 600u & 1u) : (now / 250u & 1u)))
@@ -530,7 +526,7 @@ static void play_view(void)
         text_cat(t, "EVERY KEY PLAYS ");
         text_cat(t, kind == MS_CHORD_MAJ ? "maj" : MS_CHORD_SUFFIX[kind]);
     } else {
-        text_cat(t, "EACH KEY PLAYS ITS CHORD IN THE KEY");
+        text_cat(t, "EACH KEY PLAYS A CHORD THAT FITS");
     }
     centred(88, &FONT_T, t, ST_TEXT);
     t[0] = 0;
@@ -538,7 +534,7 @@ static void play_view(void)
     text_cat(t, set.play[2] ? ", STRUMMED" : ", ALL AT ONCE");
     centred(102, &FONT_T, t, ST_SOFT);
     centred(140, &FONT_T, set.play[3] ? "THE MUSIC FOLLOWS YOUR CHORDS" : "THE MUSIC KEEPS ITS OWN CHORDS", ST_SOFT);
-    centred(152, &FONT_T, set.keys[3] == 1 ? "WHAT YOU PLAY GOES INTO THE LOOP" : "IT ONLY LOOPS IF YOU PRESS REC",
+    centred(152, &FONT_T, set.keys[3] == 1 ? "IT LOOPS. GLO TAKES THE LAST LAYER OUT" : "IT ONLY LOOPS IF YOU PRESS REC",
             ST_SOFT);
 }
 
@@ -551,7 +547,7 @@ static void build_view(uint32_t now)
     char t[40];
     t[0] = 0;
     if (set.chords[0]) {
-        text_cat(t, "ON HOLD BY SIMPLE. CHANGE ONE TO PLAY");
+        text_cat(t, "PAUSED: SIMPLE HOLDS ONE CHORD");
     } else if (on && ms_vis.chord_slot < 0) {
         text_cat(t, ms_vis.live_root >= 0 && set.play[3] ? "FOLLOWING WHAT YOU PLAY" : "STARTING");
     } else if (on) {
@@ -647,7 +643,7 @@ static void beat_simple_view(rgb_t acc)
     centred(58, &FONT_T, t, ST_TEXT);
     beat_grid(72, 10, 0, acc);
     centred(140, &FONT_T, b[0] ? "MAKE YOUR OWN ON DRUMS AND BASS" : "TURN KIT TO HEAR A BEAT", ST_SOFT);
-    centred(152, &FONT_T, "SWING IS ON THE DRUMS PAGE", ST_SOFT);
+    centred(152, &FONT_T, "GLO GOES BACK TO THE SCENE'S BEAT", ST_SOFT);
 }
 
 static void drums_view(rgb_t acc)
@@ -659,8 +655,8 @@ static void drums_view(rgb_t acc)
     text_cat(t, " KIT, ");
     text_cat(t, b[1] == PAT_MINE ? "YOUR PATTERN" : MS_PATTERN_NAME[b[1]]);
     centred(56, &FONT_T, t, ST_TEXT);
-    centred(140, &FONT_T, "THE FIRST 16 KEYS ARE THE STEPS", ST_SOFT);
-    centred(152, &FONT_T, "HIGHER KEYS PICK A DRUM. GLO REMOVES IT", ST_SOFT);
+    centred(140, &FONT_T, "FIRST 16 KEYS ARE STEPS, HIGHER ONES DRUMS", ST_SOFT);
+    centred(152, &FONT_T, "GLO REMOVES THIS DRUM'S STEPS", ST_SOFT);
     beat_grid(70, 11, 1, acc);
 }
 
@@ -668,7 +664,7 @@ static void bass_view(rgb_t acc)
 {
     static const char *const CELL[MS_NBN] = {"", "ROOT", "3RD", "5TH", "7TH", "OCT", "LEAD"};
     int32_t i, play = ms_vis.playing ? (int32_t)((ms_vis.step - 1u) & 15u) : -1;   /* step is already the next one */
-    char t[32];
+    char t[48];
     int mine = set.beat[set.mode][3] == BASS_MINE;
     t[0] = 0;
     if (!mine) {
@@ -693,8 +689,8 @@ static void bass_view(rgb_t acc)
             cv_text(x + 14 - w / 2, y + 7, &FONT_T, CELL[b], mine ? c565(acc) : ST_SOFT);
         }
     }
-    centred(140, &FONT_T, "THE FIRST 16 KEYS ARE THE STEPS", ST_SOFT);
-    centred(152, &FONT_T, "HIGHER KEYS PICK A NOTE. GLO REMOVES IT", ST_SOFT);
+    centred(140, &FONT_T, "FIRST 16 KEYS ARE STEPS, HIGHER ONES NOTES", ST_SOFT);
+    centred(152, &FONT_T, "GLO REMOVES THE WHOLE LINE", ST_SOFT);
 }
 
 static void beat_view(void)

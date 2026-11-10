@@ -63,7 +63,7 @@ To get a scene back to how it started, hold SAVE until the screen says LET GO TO
 resets its HOME and MIX knobs, tempo, mood and beat.
 
 To put everything back to how MOSS-1 first starts, keep holding SAVE until the screen says LET GO TO RESET
-EVERYTHING (about six seconds), then let go. Every setting goes back, the loop playing is cleared and the loop
+ALL (about six seconds), then let go. Every setting goes back, the loop playing is cleared and the loop
 library is kept. Press SAVE afterwards to keep it that way.
 
 ![](img/lofi-study.png)
@@ -121,13 +121,14 @@ What the delay and reverb do over time. Turn DELAY up on the FX page to hear it 
 
 ### EVOLVE (FX a third time)
 
-The music changing by itself over minutes, so a scene left on for an hour is never quite the same, and a scene you
-pick can start on a different chord of its path. It starts on, gently. AMOUNT, CHORDS and FILLS at 0 (they show OFF) and every scene plays
+The music changing by itself over minutes, so a scene left on for an hour is never quite the same. Each time you
+pick a scene, it starts a little differently too: its sound a little away from how it is set, and maybe on another chord of
+its path. It starts on, gently. AMOUNT, CHORDS and FILLS at 0 (they show OFF) and every scene plays
 just as it is set.
 
 | Knob | What it does |
 | --- | --- |
-| AMOUNT | How far the HOME knobs and the MIX levels wander, now and then, around where you set them, gliding over a few seconds. Your settings stay as they are; only the sound moves. A MIX level at 0 stays off |
+| AMOUNT | How far the HOME knobs and the MIX levels wander, now and then, around where you set them, gliding over ten seconds or so, and how far from them a scene starts. Your settings stay as they are; only the sound moves. A MIX level at 0 stays off |
 | PACE | How often: every few minutes at 0, every half minute or so at 100 |
 | CHORDS | The chance a scene starts on another chord of its path, and that its own progression now and then takes a neighbouring chord. Your MINE and BUILT progressions, and a held CHORD, are left alone |
 | FILLS | How much the drums get busier and calmer over time: more ghost notes and fills, then fewer. Your own pattern on DRUMS plays as you set it |
@@ -180,9 +181,10 @@ to the screen you came from.
 Under the tabs, the looper says what it is doing and what to do next:
 
 - **LISTENING** (the dot pulses): TAP is on LISTEN and it is waiting for you. Play and a loop starts by itself.
-- **RECORDING LAYER 1** (red): it is taking down what you play. Press REC to keep it now, or stop playing and it
-  loops by itself.
-- **ADDING LAYER 2** (red): you are playing over the loop. Press REC to keep it now, or pause and it joins by itself.
+- **RECORDING LAYER 1** (red): it is taking down what you play. Press REC to keep it. With TAP on LISTEN you can
+  also just stop playing, and it loops by itself.
+- **ADDING LAYER 2** (red): you are playing over the loop. Press REC to keep it. With TAP on LISTEN a pause does the
+  same.
 - **FADING** or **KEPT**: the loop is playing. The line under it takes turns with tips.
 
 The lanes are the layers, the dots are their notes and the line is the playhead. A mark on the left shows which
@@ -335,13 +337,18 @@ The beat in four knobs. The page shows the kit, pattern and bass by name, and th
 | LEVEL | How loud the drums are, and the ROOT, WALK or MINE bass |
 | BASS | AUTO (the mode's own), OFF, ROOT (on the chord root, with the kick), WALK (moves through the chord), MINE (your line on BASS) |
 
+GLO on this page goes back to the scene's own kit, pattern and bass. Your own pattern and line stay for when you pick
+MINE again.
+
 ### DRUMS
 
 A row of sixteen steps for each drum: KICK, SNARE, GHOST (a quiet snare), HAT, OPEN (hat) and PERC. The first 16
 keys are the steps; the six keys above them pick a drum and play it. Tap a step to turn it on or off for that drum.
 
 You always edit what you hear: the first step you tap on a preset pattern copies it into MINE, and PATTERN turns to
-MINE. So pick the pattern closest to what you want on BEAT, then change it here. With no kit, the first tap picks
+MINE. So pick the pattern closest to what you want on BEAT, then change it here. If MINE already holds a pattern of
+yours, the first tap asks REPLACE YOUR PATTERN?, and a second tap does it; turn PATTERN to MINE on BEAT to go back
+to yours instead. WALTZ is a bar of 12 steps, and so is a MINE copied from it. With no kit, the first tap picks
 LOFI so you hear it.
 
 | Knob | What it does |
@@ -349,7 +356,7 @@ LOFI so you hear it.
 | DRUM | The drum the keys set, and you hear it |
 | LEVEL | That drum's level |
 | CHANCE | How often its steps play. 100% always; lower and it skips now and then, so the beat breathes |
-| SWING | AUTO is the pattern's own. 50% is straight; up to 66% is a lazy, triplet swing. It works on every pattern |
+| SWING | AUTO is the pattern's own (MINE keeps the swing of the pattern it was copied from). 50% is straight; up to 66% is a lazy, triplet swing. It works on every pattern |
 
 GLO removes all the steps of the drum you picked; it asks first, so press GLO again to do it.
 
@@ -359,7 +366,8 @@ A bass line of sixteen steps that follows the chords: each step is a role in the
 right when the chords change, on SIMPLE, BUILD or PLAY. The first 16 keys are the steps; the six keys above them
 pick ROOT, 3RD, 5TH, 7TH, OCTAVE or LEAD-IN (a semitone under the root, leading into it) and play it. Tap a step to put
 that note there, tap it again to take it away. The first step makes BASS MINE: from ROOT or WALK it starts as a copy
-of that line, from AUTO or OFF with just the root on 1.
+of that line, from AUTO or OFF with just the root on 1. If you already have a line of your own, it asks first, the
+same way as DRUMS.
 
 | Knob | What it does |
 | --- | --- |
@@ -441,7 +449,7 @@ The bar at the bottom of the picture shows the loop: red while recording, then F
 next to it are the layers: bright when on, grey when off, dark when empty. REC's light blinks fast while recording,
 slowly while the loop fades, and stays on when it is kept.
 
-A recording stops by itself after 60 seconds. A loop holds 96 notes; past that, new notes replace the quietest.
+A recording stops by itself after 60 seconds. A loop holds 128 notes; past that, new notes replace the quietest.
 The loop keeps playing when you press PLAY to stop the music, so you can play over silence. HOLD's notes are not
 looped.
 

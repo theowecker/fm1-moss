@@ -95,6 +95,8 @@ typedef struct {
     uint16_t drum_row[MS_NDRUMS];        /* PATTERN MINE: each drum's sixteen steps */
     uint8_t bass_line[16];               /* BASS MINE: MS_BN_* on each sixteenth */
     uint8_t drum_len;                    /* PATTERN MINE's steps: 16, or 12 when it came from WALTZ */
+    uint8_t drum_swing;                  /* PATTERN MINE's own swing, %, from the pattern it was copied from */
+    uint8_t own;                         /* bit 0: MINE's pattern, bit 1: its bass line, has been edited by hand */
     uint32_t seed;                       /* a new one at each SAVE, so a scene's start differs from one boot to the next */
 } settings_t;
 static settings_t set;
@@ -149,7 +151,9 @@ static void settings_defaults(void)
         set.play[0] = 0, set.play[1] = 3, set.play[2] = 15, set.play[3] = 1;   /* the key's chords, SMOOTH, FOLLOW */
     {
         static const uint8_t LVL[MS_NDRUMS] = {90, 85, 30, 65, 55, 60};
-        set.drum_len = (uint8_t)ms_pattern_rows(MODE_LOFI, 0, 1, set.drum_row, 0);   /* BOOMBAP until you make your own */
+        float sw;
+        set.drum_len = (uint8_t)ms_pattern_rows(MODE_LOFI, 0, 1, set.drum_row, &sw);   /* BOOMBAP until you make your own */
+        set.drum_swing = (uint8_t)(sw * 100.0f + 0.5f);
         for (m = 0; m < MS_NDRUMS; m++) {
             set.drum_lvl[m] = LVL[m];
             set.drum_ch[m] = 100;
@@ -193,7 +197,7 @@ static int settings_ok(void)
     for (m = 0; m < MS_NBUILT; m++)
         if (set.b_root[m] > 11 || set.b_kind[m] >= MS_NCHORDS || set.b_len[m] > 3)
             return 0;
-    if (set.drum_sel >= MS_NDRUMS || set.swing > 9 || (set.drum_len != 12 && set.drum_len != 16))
+    if (set.drum_sel >= MS_NDRUMS || set.swing > 9 || (set.drum_len != 12 && set.drum_len != 16) || set.drum_swing > 40)
         return 0;
     for (m = 0; m < 4; m++)
         if (!knob_ok(PG_BASS, m, set.bassx[m]))
@@ -296,6 +300,7 @@ static void send_all(void)
     }
     ms_beat(4, set.swing);
     ms_beat(46, set.drum_len);
+    ms_beat(47, set.drum_swing);
     for (i = 0; i < MS_NDRUMS; i++)
         drum_send(i);
     for (i = 0; i < 16; i++)
@@ -379,6 +384,8 @@ static struct {
     uint8_t glo_warned;                  /* the hold has said it is coming */
     uint8_t confirm_page;                /* the page an armed GLO was asked on */
     uint8_t copied;                      /* this edit made a preset into MINE */
+    uint32_t replace_t;                  /* replacing your own pattern or line was asked, plat_ms | 1 */
+    uint8_t replace_page;
     uint8_t hist[MS_NLAYERS], hist_n;    /* the layers in the order they came, for GLO's undo */
     uint8_t view_before, page_before;    /* where the LOOPS screen was opened from, to go back to */
     uint8_t tracks_seen;                 /* ms_vis.lp_tracks last frame: a layer appearing gets its level back */
@@ -448,6 +455,18 @@ void app_say(const char *a, const char *b)
             text_cat(t, ui.msg[1]);
         }
         ann_say(t, 0, ANN_NOW);
+    }
+}
+
+/* the message's two halves as one line: a question runs on, anything else gets a colon */
+static void msg_join(char *t)
+{
+    uint32_t n = text_len(ui.msg[0]);
+    t[0] = 0;
+    text_cat(t, ui.msg[0]);
+    if (ui.msg[1][0]) {
+        text_cat(t, n && ui.msg[0][n - 1] == '?' ? " " : ": ");
+        text_cat(t, ui.msg[1]);
     }
 }
 
@@ -759,19 +778,36 @@ static int beat_rows(uint16_t rows[MS_NDRUMS])
     return set.drum_len;
 }
 
-static void drums_mine(void)
+/* your own pattern or line is about to be replaced by a copy of what plays: the first edit asks, a second within
+ * CONFIRM_WAIT does it. 1 = go ahead */
+static int replace_ok(int own, const char *what)
 {
-    int m = set.mode, i;
+    uint32_t now = plat_ms();
+    if (!own || (ui.replace_t && since(now, ui.replace_t) < (int32_t)CONFIRM_WAIT && ui.replace_page == set.page)) {
+        ui.replace_t = 0;
+        return 1;
+    }
+    ui.replace_t = now | 1u;
+    ui.replace_page = set.page;
+    app_say(what, "TAP AGAIN TO DO IT");
+    ui.msg_until = now + CONFIRM_WAIT;
+    return 0;
+}
+
+/* editing changes what plays: a preset is copied into MINE first, its swing and length with it. 0 = it asked first */
+static int drums_mine(void)
+{
+    int m = set.mode, i, own = set.own & 1u;
     if (set.beat[m][1] != PAT_MINE) {
         char t[24] = "COPIED FROM ";
         float sw;
-        text_cat(t, MS_PATTERN_NAME[set.beat[m][1]]);
+        if (!replace_ok(own, "REPLACE YOUR PATTERN?"))
+            return 0;
+        text_cat(t, set.beat[m][1] ? MS_PATTERN_NAME[set.beat[m][1]] : "THE SCENE");
         set.drum_len = (uint8_t)ms_pattern_rows(m, set.scene[m], set.beat[m][1], set.drum_row, &sw);
+        set.drum_swing = (uint8_t)clamp((int)(sw * 100.0f + 0.5f), 0, 40);
         ms_beat(46, set.drum_len);
-        if (!set.swing) {                /* its swing comes along, as SWING's nearest step */
-            set.swing = (uint8_t)clamp((int)(sw / 0.04f + 0.5f) + 1, 1, 9);
-            ms_beat(4, set.swing);
-        }
+        ms_beat(47, set.drum_swing);
         set.beat[m][1] = PAT_MINE;
         for (i = 0; i < MS_NDRUMS; i++)
             drum_send(i);
@@ -784,17 +820,20 @@ static void drums_mine(void)
         ms_beat(0, 2);
     }
     set_dirty = 1;
+    return 1;
 }
 
-static void bass_mine(void)
+static int bass_mine(void)
 {
-    int m = set.mode, i;
+    int m = set.mode, i, own = set.own >> 1 & 1u, len;
     uint16_t rows[MS_NDRUMS];
     if (set.beat[m][3] == BASS_MINE)
-        return;
-    beat_rows(rows);                     /* from what it played: ROOT on the kicks, WALK's four, else the root on 1 */
+        return 1;
+    if (!replace_ok(own, "REPLACE YOUR LINE?"))
+        return 0;
+    len = beat_rows(rows);               /* from what it played: ROOT on the kicks, WALK's four, else the root on 1 */
     for (i = 0; i < 16; i++)
-        set.bass_line[i] = set.beat[m][3] == 2 ? ((rows[MS_DRUM_KICK] >> i & 1u) || !i ? MS_BN_ROOT : MS_BN_OFF)
+        set.bass_line[i] = set.beat[m][3] == 2 ? ((rows[MS_DRUM_KICK] >> (i % len) & 1u) || !i ? MS_BN_ROOT : MS_BN_OFF)
                          : set.beat[m][3] == 3 ? (i == 0 ? MS_BN_ROOT : i == 4 ? MS_BN_3RD : i == 8 ? MS_BN_5TH
                                                   : i == 12 ? MS_BN_STEP : MS_BN_OFF)
                          : i == 0 ? MS_BN_ROOT : MS_BN_OFF;
@@ -804,6 +843,7 @@ static void bass_mine(void)
     ms_beat(3, BASS_MINE);
     ui.copied = 1;
     set_dirty = 1;
+    return 1;
 }
 
 static void step_say(const char *what, int k, const char *v)
@@ -823,18 +863,24 @@ static void drums_key(int k)
     if (k >= 16) {
         if (k - 16 < MS_NDRUMS) {
             set.drum_sel = (uint8_t)(k - 16);
+            ui.confirm[3] = 0;           /* a question about the drum before is let go */
             ms_beat(8, set.drum_sel);
             app_say(DRUM_NAME[set.drum_sel], "TAP ITS STEPS");
         }
         return;
     }
-    ui.copied = 0;
-    drums_mine();
-    if (k >= set.drum_len) {
-        app_say("A BAR OF 12 STEPS", "");
-        return;
+    {
+        uint16_t rows[MS_NDRUMS];
+        if (k >= beat_rows(rows)) {
+            app_say("THIS ONE HAS 12 STEPS", "");
+            return;
+        }
     }
+    ui.copied = 0;
+    if (!drums_mine())
+        return;
     set.drum_row[d] ^= (uint16_t)(1u << k);
+    set.own |= 1u;
     drum_send(d);
     if (!ui.copied)                      /* the copy's news goes first */
         step_say(DRUM_NAME[d], k, set.drum_row[d] >> k & 1u ? "ON" : "OFF");
@@ -847,14 +893,16 @@ static void bass_key(int k)
         if (k - 16 < MS_NBN - 1) {
             set.bassx[0] = (uint8_t)(k - 16);
             ms_beat(9, k - 15);
-            app_say(BN_NAME[k - 15], set.beat[set.mode][3] == 1 ? "BASS IS OFF ON BEAT" : "TAP WHERE IT GOES");
+            app_say(BN_NAME[k - 15], set.beat[set.mode][3] == 1 ? "BASS OFF ON BEAT PAGE" : "TAP WHERE IT GOES");
             set_dirty = 1;
         }
         return;
     }
     ui.copied = 0;
-    bass_mine();                         /* the line was not on screen before: the first tap places, never removes */
+    if (!bass_mine())                    /* the line was not on screen before: the first tap places, never removes */
+        return;
     set.bass_line[k] = (uint8_t)(set.bass_line[k] == v && !ui.copied ? MS_BN_OFF : v);
+    set.own |= 2u;
     ms_beat(30 + k, set.bass_line[k]);
     step_say("BASS", k, BN_NAME[set.bass_line[k]]);
 }
@@ -865,17 +913,23 @@ static void drums_turn(int i, int32_t d)
     char t[16];
     if (i == 0) {
         set.drum_sel = (uint8_t)clamp(r + d, 0, MS_NDRUMS - 1);
+        ui.confirm[3] = 0;
         ms_beat(8, set.drum_sel);
     } else if (i == 3) {
         set.swing = (uint8_t)clamp(set.swing + d, 0, 9);
         ms_beat(4, set.swing);
     } else {
         uint8_t *v = i == 1 ? &set.drum_lvl[r] : &set.drum_ch[r];
-        drums_mine();
+        ui.copied = 0;
+        if (!drums_mine())
+            return;
         *v = (uint8_t)clamp(*v + 2 * d, 0, 100);
+        set.own |= 1u;
         drum_send(r);
     }
     set_dirty = 1;
+    if (ui.copied && i)                  /* the copy's news first */
+        return;
     knob_text(i, t);
     app_say(i ? PAGE_KNOBS[PG_DRUMS][i] : "DRUM", t);
 }
@@ -1180,9 +1234,25 @@ static void glo_tap(uint32_t now)
             build_remove();
         return;
     }
-    if ((set.page == PG_DRUMS || set.page == PG_BASS) && !glo_again(now, set.page == PG_DRUMS ? "REMOVE ALL ITS STEPS?"
-                                                                                              : "REMOVE THE BASS LINE?"))
+    if (set.page == PG_DRUMS || set.page == PG_BASS) {
+        char q[24] = "REMOVE ";
+        text_cat(q, set.page == PG_DRUMS ? DRUM_NAME[set.drum_sel] : "THE BASS LINE");
+        text_cat(q, set.page == PG_DRUMS ? " STEPS?" : "?");
+        if (!glo_again(now, q))
+            return;
+    }
+    if (set.page == PG_BEAT) {           /* the scene's own kit, pattern and bass; MINE stays for later */
+        const ms_scene_t *sc = ms_scene(set.mode, set.scene[set.mode]);
+        set.beat[set.mode][0] = sc->kit;
+        set.beat[set.mode][1] = sc->pattern;
+        set.beat[set.mode][3] = 0;
+        ms_beat(0, sc->kit);
+        ms_beat(1, sc->pattern);
+        ms_beat(3, 0);
+        set_dirty = 1;
+        app_say("BEAT", "THE SCENE'S OWN AGAIN");
         return;
+    }
     if (set.page == PG_DRUMS) {
         drums_mine();
         set.drum_row[set.drum_sel] = 0;
@@ -1762,13 +1832,13 @@ static void input(void)
                     ui.hist_n = 0;
                     app_say("LOOP CLEARED", ui.lib_cur >= 0 ? "STILL IN THE LIBRARY" : "");
                 }
-            } else if (held >= 300 && !ui.glo_warned) {
+            } else if (held >= 300 && !ui.glo_warned && ms_vis.lp_state != MS_LOOP_EMPTY) {
                 ui.glo_warned = 1;
                 app_say("KEEP HOLDING TO CLEAR", "");
             }
         } else {
             ui.glo_t = 0;
-            if (held < 300)              /* let go early from a hold: nothing */
+            if (held < 300 || !ui.glo_warned)   /* let go early from a hold: nothing */
                 glo_tap(now);
             else
                 app_say("NOTHING CLEARED", "");

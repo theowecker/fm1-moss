@@ -39,6 +39,7 @@ expect tracks 3
 shot tracks.png
 tap SEQ
 tap SEQ
+tap SEQ
 press GLO
 wait 1600
 release GLO

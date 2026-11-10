@@ -29,6 +29,8 @@ static void scene_setup(int m)
 {
     const ms_scene_t *sc = ms_scene(m, 0);
     int i;
+    for (i = 0; i < 4; i++)              /* EVOLVE off: each knob is heard against the scene as set */
+        ms_evolve(i, i == 1 ? 40 : 0);
     ms_mode(m, 0);
     for (i = 0; i < MS_NMACRO; i++)
         ms_macro(i, sc->macro[i]);
