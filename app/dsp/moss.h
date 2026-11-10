@@ -88,7 +88,7 @@ void ms_beat(int i, int v);            /* 0 kit, 1 pattern, 3 bass: by their nam
 extern const char *const MS_KIT_NAME[MS_NKITS];
 extern const char *const MS_PATTERN_NAME[MS_NPATTERNS];
 extern const char *const MS_BASS_NAME[MS_NBASS];
-#define MS_NSPACES 6
+#define MS_NSPACES 13
 extern const char *const MS_SPACE_NAME[MS_NSPACES];
 extern const char *const MS_DIV_NAME[6];
 enum { MS_LOOP_EMPTY, MS_LOOP_REC, MS_LOOP_PLAY, MS_LOOP_DUB };

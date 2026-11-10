@@ -264,8 +264,10 @@ static struct {
 } kb;
 
 
-enum { SP_HALL, SP_PLATE, SP_CLOUD, SP_SHIMMER, SP_TAPE, SP_REVERSE, SP_N };
-const char *const MS_SPACE_NAME[SP_N] = {"HALL", "PLATE", "CLOUD", "SHIMMER", "TAPE", "REVERSE"};
+enum { SP_HALL, SP_PLATE, SP_CLOUD, SP_SHIMMER, SP_TAPE, SP_REVERSE, SP_DEEP, SP_DUB, SP_DREAM, SP_RADIO, SP_WATER,
+       SP_GLITCH, SP_PULSE, SP_N };
+const char *const MS_SPACE_NAME[SP_N] = {"HALL", "PLATE", "CLOUD", "SHIMMER", "TAPE", "REVERSE", "DEEP", "DUB", "DREAM",
+                                          "RADIO", "WATER", "GLITCH", "PULSE"};
 const char *const MS_DIV_NAME[6] = {"1/16", "1/8", "1/8.", "1/4", "1/4.", "1/2"};
 static const float DIV_BEATS[6] = {0.25f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f};
 
@@ -281,6 +283,10 @@ static struct {
     float film;
     float crush_bits;                  /* LOFI's DUST past 0.4: the levels the bit crusher keeps, 0 off */
     float shimmer, echo_wow, echo_to_rev, rev_mod, damp_hz, reverse;
+    /* what a space does past the reverb: the whole mix high-passed, chorused, pulsed, squeezed into a radio, wobbled;
+     * the shimmer an octave down; random delay jumps; a cap on the echoes' brightness and a floor on their thinness */
+    float hp_a, chorus, chorus_rate, trem, radio, wob_add, alg_rand, echo_lp_max, echo_hp_min;
+    int sh_down;
 } k;
 
 static struct {
@@ -1114,6 +1120,7 @@ static struct {
     float rev_last, drop_t, drop_g, wob_s, film_s, wob_wf;
     uint32_t sm_quiet;                 /* samples since anything went into the smear */
     float drum_l, drum_r;               /* the kit's last sample, for the declick when KIT goes OFF */
+    float hp_l, hp_r, ch_ph, tr_ph, ch_s, tr_s;   /* the spaces' chorus and pulse: phases, and depths eased in */
 } ms;
 
 static void fx_init(void)
@@ -1175,10 +1182,12 @@ HOT void echo_tick(float in, float *l, float *r)
     a = (float)echo_r[i0] * (1.0f / 32767.0f);
     b = (float)echo_r[(i0 + 1) % ECHO_N] * (1.0f / 32767.0f);
     dr2 = a + fr * (b - a);
-    echo_lp_l += mo.tone_a * (dl - echo_lp_l);
-    echo_lp_r += mo.tone_a * (dr2 - echo_lp_r);
-    echo_hp_l += mo.hp_a * (echo_lp_l - echo_hp_l);
-    echo_hp_r += mo.hp_a * (echo_lp_r - echo_hp_r);
+    a = h_minf(mo.tone_a, k.echo_lp_max);
+    b = h_maxf(mo.hp_a, k.echo_hp_min);
+    echo_lp_l += a * (dl - echo_lp_l);
+    echo_lp_r += a * (dr2 - echo_lp_r);
+    echo_hp_l += b * (echo_lp_l - echo_hp_l);
+    echo_hp_r += b * (echo_lp_r - echo_hp_r);
     dl = echo_lp_l - echo_hp_l;
     dr2 = echo_lp_r - echo_hp_r;
     /* ping-pong: input enters left, repeats cross over; pairs of samples are averaged into one stored */
@@ -1638,6 +1647,10 @@ static void apply(void)
     mo.time_base = echo_len_target;
     mo.time_hold = 0.0f;
     k.shimmer = k.reverse = k.damp_hz = 0.0f;
+    k.hp_a = k.chorus = k.trem = k.radio = k.wob_add = k.alg_rand = k.echo_hp_min = 0.0f;
+    k.chorus_rate = 0.6f;
+    k.echo_lp_max = 1.0f;
+    k.sh_down = 0;
     k.echo_wow = 0.004f * k.film;
     k.echo_to_rev = 0.4f;
     k.rev_mod = 1.0f;
@@ -1653,16 +1666,82 @@ static void apply(void)
         k.rev_mod = 3.5f;
         k.damp_hz = 3500.0f;
         break;
-    case SP_SHIMMER:
-        k.shimmer = 0.3f;
+    case SP_SHIMMER:                     /* a space is heard even with REVERB low */
+        k.shimmer = 0.5f;
+        k.rev_mix = fm_maxf(k.rev_mix, 0.4f);
+        k.rev_rt = fm_maxf(k.rev_rt, 4.0f);
+        k.rev_mod = 1.5f;
         break;
     case SP_TAPE:
         k.rev_rt *= 0.6f;
-        k.echo_wow += 0.006f;
+        k.echo_wow += 0.012f;
         k.echo_to_rev = 1.0f;
+        k.wob_add = 0.35f;
+        k.echo_lp_max = onepole_a(3500.0f);
         break;
     case SP_REVERSE:
-        k.reverse = 0.6f;
+        k.reverse = 0.9f;
+        k.rev_mix = fm_maxf(k.rev_mix, 0.35f);
+        break;
+    case SP_DEEP:                        /* an octave under everything, in a dark cave */
+        k.shimmer = 0.4f;
+        k.sh_down = 1;
+        k.rev_size = 1.0f;
+        k.rev_rt = fm_minf(k.rev_rt * 1.4f + 2.0f, 18.0f);
+        k.damp_hz = 2200.0f;
+        k.tone_fc = fm_minf(k.tone_fc, 4500.0f);
+        break;
+    case SP_DUB:                         /* dotted echoes that keep going, dark and thin, over a small spring */
+        k.echo_mix = fm_maxf(k.echo_mix, 0.9f);
+        k.echo_fb = fm_maxf(k.echo_fb, 0.72f);
+        echo_len_target = fm_minf(0.75f * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
+        mo.time_base = echo_len_target;
+        k.echo_lp_max = onepole_a(1600.0f);
+        k.echo_hp_min = onepole_a(280.0f);
+        k.echo_to_rev = 0.2f;
+        k.rev_size = 0.4f;
+        k.rev_rt = 1.6f;
+        k.rev_mix *= 0.7f;
+        k.damp_hz = 5000.0f;
+        break;
+    case SP_DREAM:                       /* a lush, wide chorus in a soft shimmering room */
+        k.chorus = 0.7f;
+        k.chorus_rate = 0.45f;
+        k.shimmer = 0.12f;
+        k.rev_size = 0.9f;
+        k.rev_mod = 2.5f;
+        k.damp_hz = 7000.0f;
+        break;
+    case SP_RADIO:                       /* a small transistor radio: thin, narrow, a little driven */
+        k.radio = 1.0f;
+        k.hp_a = onepole_a(500.0f);
+        k.tone_fc = fm_minf(k.tone_fc, 3000.0f);
+        k.echo_lp_max = onepole_a(2500.0f);
+        k.rev_size = 0.35f;
+        k.rev_rt = 0.8f;
+        k.rev_mix *= 0.5f;
+        break;
+    case SP_WATER:                       /* under the surface: muffled, slow and swaying */
+        k.tone_fc = fm_minf(k.tone_fc, 650.0f);
+        k.chorus = 1.0f;
+        k.chorus_rate = 0.18f;
+        k.wob_add = 0.3f;
+        k.rev_size = 1.0f;
+        k.rev_rt = fm_minf(k.rev_rt * 1.3f + 1.5f, 16.0f);
+        k.damp_hz = 1500.0f;
+        break;
+    case SP_GLITCH:                      /* the echoes stutter and jump */
+        k.alg_rand = 0.9f;
+        k.echo_mix = fm_maxf(k.echo_mix, 0.6f);
+        k.echo_fb = fm_maxf(k.echo_fb, 0.5f);
+        k.rev_size *= 0.5f;
+        k.rev_rt *= 0.6f;
+        break;
+    case SP_PULSE:                       /* the sound throbs and pans in eighths */
+        k.trem = 0.75f;
+        k.rev_size *= 0.6f;
+        k.rev_rt *= 0.7f;
+        k.damp_hz = 9000.0f;
         break;
     }
     k.dust = k.wobble = k.weather = k.life = k.density = k.drift = k.crush_bits = 0.0f;
@@ -1802,7 +1881,15 @@ HOT float shimmer_tick(float in)
     for (g = 0; g < 2; g++) {
         uint32_t a = sh.age[g];
         float t = (float)a * (1.0f / (float)SH_G), w = 4.0f * t * (1.0f - t);
-        o += (float)sh_buf[(sh.w - (2u * SH_G - a)) & (SH_N - 1)] * (1.0f / 32767.0f) * w * w;
+        if (k.sh_down) {                 /* read at half speed: an octave down; odd ages between two samples */
+            uint32_t i = sh.w - SH_G / 4u - (a >> 1);
+            float v = (float)sh_buf[i & (SH_N - 1)];
+            if (a & 1u)
+                v = 0.5f * (v + (float)sh_buf[(i - 1u) & (SH_N - 1)]);
+            o += v * (1.0f / 32767.0f) * w * w;
+        } else {
+            o += (float)sh_buf[(sh.w - (2u * SH_G - a)) & (SH_N - 1)] * (1.0f / 32767.0f) * w * w;
+        }
         if (++sh.age[g] >= SH_G)
             sh.age[g] = 0;
     }
@@ -2293,21 +2380,24 @@ static int loop_listening(void)
  * toward endless for a moment, or the reverb blooms */
 static void motion_tick(float dt)
 {
+    float rnd;
     mo.mod_ph = wrap1(mo.mod_ph + (0.25f + 0.9f * mo.mod) * dt);
     mo.mod_m = sin_t(mo.mod_ph);
     mo.fb_boost *= 1.0f - dt / 1.5f;
     if (mo.time_hold > 0.0f && (mo.time_hold -= dt) <= 0.0f)
         echo_len_target = mo.time_base;
     mo.rev_boost *= 1.0f - dt / 3.0f;
-    if (mo.random <= 0.0f || (mo.ev_t -= dt) > 0.0f)
+    rnd = fm_maxf(mo.random, k.alg_rand);
+    if (rnd <= 0.0f || (mo.ev_t -= dt) > 0.0f)
         return;
-    mo.ev_t = (1.0f + 6.0f * frand()) * (1.2f - mo.random);
-    if (frand() > mo.random)
+    mo.ev_t = (1.0f + 6.0f * frand()) * (1.2f - rnd);
+    if (frand() > rnd)
         return;
     switch (irand(3)) {
-    case 0:
-        echo_len_target = fm_minf(DIV_BEATS[irand(6)] * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
-        mo.time_hold = 3.0f + 5.0f * frand();
+    case 0:                              /* GLITCH jumps between short times and soon comes back */
+        echo_len_target = fm_minf(DIV_BEATS[irand(k.alg_rand > 0.0f ? 3 : 6)] * 60.0f / (float)st.tempo * MS_SR * 0.5f,
+                                  (float)(ECHO_N - 4));
+        mo.time_hold = k.alg_rand > 0.0f ? 0.4f + 1.2f * frand() : 3.0f + 5.0f * frand();
         break;
     case 1:
         mo.fb_boost = fm_maxf(0.0f, 0.9f - k.echo_fb);
@@ -2932,7 +3022,8 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
 {
     uint32_t i;
     int j;
-    float gf = st.gen_fade, wob_target = h_maxf(st.mode == MODE_LOFI ? k.wobble : 0.0f, 0.75f * k.film), wob_depth;
+    float gf = st.gen_fade, wob_target = h_maxf(h_maxf(st.mode == MODE_LOFI ? k.wobble : 0.0f, 0.75f * k.film), k.wob_add);
+    float wob_depth;
     float lg[6], dust = st.mode == MODE_LOFI ? k.dust : 0.0f, noise = h_maxf(dust, 0.6f * k.film) * st.gen_fade;
     float crush_bits = k.crush_bits;
     float rain_gain = st.mode == MODE_LOFI ? st.layer[3] : st.layer[0];
@@ -3137,6 +3228,15 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
         ms.rev_last = 0.5f * (x + y);
         l += x * 0.7f;
         r += y * 0.7f;
+        if (k.radio > 0.0f) {
+            l = r = soft_tanh(1.1f * (l + r)) * 0.55f;
+        }
+        if (k.hp_a > 0.0f) {
+            ms.hp_l += k.hp_a * (l - ms.hp_l);
+            ms.hp_r += k.hp_a * (r - ms.hp_r);
+            l -= ms.hp_l;
+            r -= ms.hp_r;
+        }
         l = svf_lp(&ms.tone_l, l);
         r = svf_lp(&ms.tone_r, r);
         /* tape wow, flutter and drift: the whole mix through a moving read head */
@@ -3150,8 +3250,25 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             d = 220.0f + wob_depth * (ms.wob_wf + 60.0f * wob_drift);
             l = wob_read(wob_l, d);
             r = wob_read(wob_r, d + 3.0f);
+            ms.ch_s += 0.0005f * (k.chorus - ms.ch_s);
+            if (ms.ch_s > 0.001f) {      /* a second, swaying head beside it: chorus */
+                float c = ms.ch_s;
+                ms.ch_ph = wrap1(ms.ch_ph + k.chorus_rate * (1.0f / MS_SR));
+                x = wob_read(wob_l, d + 150.0f + 250.0f * c * (0.5f + 0.5f * sin_t(ms.ch_ph)));
+                y = wob_read(wob_r, d + 150.0f + 250.0f * c * (0.5f + 0.5f * sin_t(ms.ch_ph + 0.25f)));
+                l = l * (1.0f - 0.35f * c) + 0.65f * c * x;
+                r = r * (1.0f - 0.35f * c) + 0.65f * c * y;
+            }
         }
         wob_w = (wob_w + 1) & (WOB_N - 1);
+        ms.tr_s += 0.0005f * (k.trem - ms.tr_s);
+        if (ms.tr_s > 0.001f) {          /* PULSE: eighth notes, one side then the other */
+            float t;
+            ms.tr_ph = wrap1(ms.tr_ph + (float)st.tempo * (2.0f / 60.0f / MS_SR));
+            t = sin_t(ms.tr_ph);
+            l *= 1.0f - ms.tr_s * (0.5f + 0.5f * t);
+            r *= 1.0f - ms.tr_s * (0.5f - 0.5f * t);
+        }
         if (crush_bits > 0.0f) {
             if (++ms.crush_i >= ms.crush_n) {
                 ms.crush_i = 0;

@@ -121,6 +121,7 @@ static void set_macro(int i, int v) { ms_macro(i, v); }
 static void set_mix(int i, int v) { ms_mix(i, v); }
 static void set_tempo(int i, int v) { (void)i; ms_tempo(v); ms_fx(1, 2); }
 static void set_mood(int i, int v) { (void)i; ms_mood(v); }
+static void set_space(int i, int v) { (void)i; ms_space(v); }   /* against HALL */
 /* the knobs that shape the repeats are heard with the repeats up, as they are used */
 static void set_wet_fx(int i, int v) { ms_fx(0, 60); ms_fx(i, v); }
 static void set_wet_motion(int i, int v) { ms_fx(0, 60); ms_motion(i, v); }
@@ -148,6 +149,10 @@ int main(int argc, char **argv)
         {"TAPE", "WARBLE", set_tape, 0, 0, 100}, {"TAPE", "DIRT", set_tape, 1, 0, 100}, {"TAPE", "AGE", set_tape, 2, 0, 100},
         {"TAPE", "SMEAR", set_tape, 3, 0, 100},
         {"SETUP", "TEMPO", set_tempo, 0, 60, 140}, {"SETUP", "MOOD", set_mood, 0, 0, 3},
+        {"SPACE", "PLATE", set_space, 0, 0, 1}, {"SPACE", "CLOUD", set_space, 0, 0, 2}, {"SPACE", "SHIMMER", set_space, 0, 0, 3},
+        {"SPACE", "TAPE", set_space, 0, 0, 4}, {"SPACE", "REVERSE", set_space, 0, 0, 5}, {"SPACE", "DEEP", set_space, 0, 0, 6},
+        {"SPACE", "DUB", set_space, 0, 0, 7}, {"SPACE", "DREAM", set_space, 0, 0, 8}, {"SPACE", "RADIO", set_space, 0, 0, 9},
+        {"SPACE", "WATER", set_space, 0, 0, 10}, {"SPACE", "GLITCH", set_space, 0, 0, 11}, {"SPACE", "PULSE", set_space, 0, 0, 12},
     };
     static float a[2 * N], b[2 * N];
     int only = argc > 1 ? atoi(argv[1]) : -1, m, fails = 0;

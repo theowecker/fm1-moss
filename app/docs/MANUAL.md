@@ -268,16 +268,26 @@ The CPU number on this page shows how hard the FM-1 is working.
 
 ## Spaces
 
-Turn ALGORITHM.
+Turn ALGORITHM. Each space changes the whole sound, not just the reverb, and works with any scene.
 
 | Space | Sound |
 | --- | --- |
 | HALL | A big, soft room |
 | PLATE | Shorter and brighter |
 | CLOUD | Huge, slow and blurred |
-| SHIMMER | Adds an octave above the reverb |
-| TAPE | Wobbly echoes that run into the reverb |
+| SHIMMER | A glowing octave above the reverb |
+| TAPE | The whole mix on a wobbly tape, its echoes dark and running into the reverb |
 | REVERSE | Everything swells in backwards |
+| DEEP | An octave below everything, in a dark cave |
+| DUB | Dotted echoes that keep going, dark and thin, over a small springy room |
+| DREAM | A lush, wide chorus in a soft, shimmering room |
+| RADIO | Thin, narrow and a little driven, like a small transistor radio |
+| WATER | Muffled, slow and swaying, as if under the surface |
+| GLITCH | The echoes stutter and jump between short times |
+| PULSE | The sound throbs and pans from side to side in eighth notes |
+
+DUB and GLITCH lean on the delay, so they sound like themselves even with DELAY low. The MOTION and FX knobs still
+work on top.
 
 ## Looping
 
