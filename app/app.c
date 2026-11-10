@@ -581,13 +581,13 @@ static int layer_turn(int i, int32_t d)
     return 1;
 }
 
-/* a layer recorded where one was turned off or cleared starts at its usual level, so it is heard */
+/* a new layer starts at the usual level, whatever the layer before it in that place was left at */
 static void tracks_tick(void)
 {
     uint8_t now = ms_vis.lp_tracks, born = (uint8_t)(now & ~ui.tracks_seen);
     int i;
     for (i = 0; i < MS_NLAYERS; i++)
-        if (born >> i & 1u && ui.track_lvl[i] == 0) {
+        if (born >> i & 1u && ui.track_lvl[i] != LAYER_LVL) {
             ui.track_lvl[i] = LAYER_LVL;
             ms_track(i, LAYER_LVL);
         }
@@ -832,6 +832,10 @@ static void lib_tick(uint32_t now)
             memset(&slots.s[0], 0, sizeof slots.s[0]);
             ui.lib_cur = 0;
             ui.sel_slot = 0;
+            if (set.page == PG_LIBRARY && ui.confirm[3]) {   /* the entries moved: never delete the wrong one */
+                ui.confirm[3] = 0;
+                ui.confirm_t = 0;
+            }
         }
         ui.lib_snap_t = now - 2500u;     /* its first copy soon */
     }
@@ -1066,6 +1070,7 @@ static void input(void)
             ui.save_t = 0;
             if (ui.save_long == 2) {     /* every setting as it first starts; the loop library stays */
                 settings_defaults();
+                sleep_set(0);                /* a fade under way would otherwise stay down */
                 ms_loop(1);
                 ms_panic();
                 send_all();

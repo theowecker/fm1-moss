@@ -257,6 +257,7 @@ enum { KV_AUTO, KV_EP, KV_BELL, KV_PAD, KV_KALIMBA };
 static struct {
     int snap, voice, listen, hold;
     int8_t seed[8];                    /* HOLD: the notes planted, -1 none */
+    uint32_t seed_age[8], seed_clock;  /* when each was planted, to find the oldest */
     float seed_t[8];                   /* seconds until each plays again */
     float harmony;
     float energy;                      /* 0..1, raised by playing the keys, makes the generators busier */
@@ -333,8 +334,10 @@ static void chord_set(int degree)
         hm.tones[3] = hm.tones[0] + 12;
         hm.tones[4] = hm.tones[2] + 12;
         ms_vis.chord_kind = fifth == 6 ? MS_CHORD_DIM : third == 4 ? MS_CHORD_MAJ : MS_CHORD_MIN;
-    } else if (hc.color >= 2) {          /* SUS and OPEN: the 3rd moves to the 4th or the 2nd */
-        hm.tones[1] = deg_semis(hm.degree + (hc.color == 2 ? 3 : 1));
+    } else if (hc.color >= 2 && fifth == 7
+               && ms_scale_mask(st.mood, st.root) >> ((st.root + hm.tones[0] + (hc.color == 2 ? 5 : 2)) % 12) & 1u) {
+        /* SUS and OPEN: the 3rd moves to a perfect 4th or a whole tone, where the key has it; else the chord is kept */
+        hm.tones[1] = hm.tones[0] + (hc.color == 2 ? 5 : 2);
         ms_vis.chord_kind = hc.color == 2 ? MS_CHORD_SUS : MS_CHORD_SUS2;
     } else if (third == 4 && seventh == 11)
         ms_vis.chord_kind = MS_CHORD_MAJ7;
@@ -359,6 +362,8 @@ static int chord_next(const int8_t *prog, int peek)
         return hc.lock;
     if (!peek && hm.pending >= 0)
         return hm.pending;
+    if (!hc.rate)                        /* STILL: the chord comes round again unchanged */
+        return hm.degree;
     if (!peek)
         hm.prog_i = i;
     if (hc.path == 6)
@@ -366,12 +371,6 @@ static int chord_next(const int8_t *prog, int peek)
     if (hc.path > 0)
         return PATHS[hc.path - 1][i];
     return prog ? prog[i] : hm.degree + MOVE[irand(8)];
-}
-
-/* STILL with no chord asked for: the chord stays as it is */
-static int chord_stays(void)
-{
-    return !hc.rate && hc.lock < 0 && hm.pending < 0;
 }
 
 /* how long until the next chord, from the scene's own length: CHANGE's STILL waits until CHORD asks for one */
@@ -1124,7 +1123,7 @@ static struct {
     float rev_last, drop_t, drop_g, wob_s, film_s, wob_wf;
     uint32_t sm_quiet;                 /* samples since anything went into the smear */
     float drum_l, drum_r;               /* the kit's last sample, for the declick when KIT goes OFF */
-    float hp_l, hp_r, ch_ph, tr_ph, ch_s, tr_s;   /* the spaces' chorus and pulse: phases, and depths eased in */
+    float hp_l, radio_s, ch_ph, tr_ph, ch_s, tr_s;   /* the spaces' chorus and pulse: phases, and depths eased in */
 } ms;
 
 static void fx_init(void)
@@ -1187,7 +1186,7 @@ HOT void echo_tick(float in, float *l, float *r)
     b = (float)echo_r[(i0 + 1) % ECHO_N] * (1.0f / 32767.0f);
     dr2 = a + fr * (b - a);
     a = h_minf(mo.tone_a, k.echo_lp_max);
-    b = h_maxf(mo.hp_a, k.echo_hp_min);
+    b = h_maxf(h_maxf(mo.hp_a, k.echo_hp_min), 0.0007f);   /* never stops tracking, or a held value stays as DC */
     echo_lp_l += a * (dl - echo_lp_l);
     echo_lp_r += a * (dr2 - echo_lp_r);
     echo_hp_l += b * (echo_lp_l - echo_hp_l);
@@ -1420,7 +1419,7 @@ static void lofi_step(void)
         int bars = hc.rate == 3 ? (ls->bars_per_chord > 1 ? ls->bars_per_chord / 2 : 1)
                  : hc.rate == 1 ? ls->bars_per_chord * 2 : ls->bars_per_chord;
         ++hm.bar_in_chord;
-        if ((hc.rate && hm.bar_in_chord >= bars) || (hc.lock >= 0 && hc.lock != hm.degree) || hm.pending >= 0) {
+        if (hm.bar_in_chord >= bars || (hc.lock >= 0 && hc.lock != hm.degree) || hm.pending >= 0) {
             hm.bar_in_chord = 0;
             chord_set(chord_next(ls->prog, 0));
             hm.pending = -1;
@@ -1480,10 +1479,6 @@ static void pad_chord(int ntones, float atk, float rel)
 static void scapes_next_chord(void)
 {
     const scape_style_t *ss = &SCAPE_STYLE[st.scene];
-    if (chord_stays()) {
-        seq.chord_t = 1e9f;
-        return;
-    }
     chord_set(chord_next(ss->prog, 0));
     hm.pending = -1;
     pad_chord(4, 4.0f, 7.0f);
@@ -1568,10 +1563,6 @@ static void lush_chord(void)
 
 static void drift_next_chord(void)
 {
-    if (chord_stays()) {
-        seq.chord_t = 1e9f;
-        return;
-    }
     chord_set(chord_next((const int8_t *)0, 0));
     hm.pending = -1;
     if (bt.bass == BASS_AUTO)
@@ -1652,7 +1643,8 @@ static void apply(void)
     mo.time_base = echo_len_target;
     mo.time_hold = 0.0f;
     k.shimmer = k.reverse = k.damp_hz = 0.0f;
-    k.hp_a = k.chorus = k.trem = k.radio = k.wob_add = k.alg_rand = k.echo_hp_min = 0.0f;
+    k.chorus = k.trem = k.radio = k.wob_add = k.alg_rand = k.echo_hp_min = 0.0f;
+    k.hp_a = onepole_a(500.0f);          /* RADIO's; kept so it fades out through the same filter */
     k.chorus_rate = 0.6f;
     k.echo_lp_max = 1.0f;
     k.sh_down = 0;
@@ -1719,7 +1711,6 @@ static void apply(void)
         break;
     case SP_RADIO:                       /* a small transistor radio: thin, narrow, a little driven */
         k.radio = 1.0f;
-        k.hp_a = onepole_a(500.0f);
         k.tone_fc = fm_minf(k.tone_fc, 3000.0f);
         k.echo_lp_max = onepole_a(2500.0f);
         k.rev_size = 0.35f;
@@ -1825,6 +1816,10 @@ static void mode_start(void)
             bd[i].syl_left = 0;
             bd[i].wait = (int32_t)((2.0f + 6.0f * frand()) * MS_SR);
         }
+        hm.prog_i = 0;                   /* the scene's own first chord, which STILL then keeps */
+        chord_set(hc.lock >= 0 ? hc.lock : hc.path == 6 ? hc.mine[0] : hc.path > 0 ? PATHS[hc.path - 1][0]
+                  : SCAPE_STYLE[st.scene].prog[0]);
+        hm.prog_i = -1;                  /* so the first change plays it, not the one after */
         seq.chord_t = 0.0f;
         seq.note_acc = 3.0f;
         break;
@@ -2470,14 +2465,12 @@ static void hold_toggle(int note, float vel)
         if (kb.seed[i] < 0 && free < 0)
             free = i;
     }
-    if (free < 0) {
-        for (i = 0; i < 7; i++) {
-            kb.seed[i] = kb.seed[i + 1];
-            kb.seed_t[i] = kb.seed_t[i + 1];
-        }
-        free = 7;
-    }
+    if (free < 0)
+        for (free = 0, i = 1; i < 8; i++)
+            if (kb.seed_age[i] < kb.seed_age[free])
+                free = i;
     kb.seed[free] = (int8_t)note;
+    kb.seed_age[free] = ++kb.seed_clock;
     into = bar_pos() / MS_SR;
     into -= fm_floorf(into / beat) * beat;
     kb.seed_t[free] = (beat - into) + beat * (float)(SEED_CYCLE[free] / 2);   /* first repeat on a beat */
@@ -3245,14 +3238,13 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
         ms.rev_last = 0.5f * (x + y);
         l += x * 0.7f;
         r += y * 0.7f;
-        if (k.radio > 0.0f) {
-            l = r = soft_tanh(1.1f * (l + r)) * 0.55f;
-        }
-        if (k.hp_a > 0.0f) {
-            ms.hp_l += k.hp_a * (l - ms.hp_l);
-            ms.hp_r += k.hp_a * (r - ms.hp_r);
-            l -= ms.hp_l;
-            r -= ms.hp_r;
+        if (k.radio > 0.0f || ms.radio_s > 0.0005f) {   /* RADIO: eased in and out like the chorus */
+            float m = soft_tanh(1.1f * (l + r)) * 0.55f;
+            ms.radio_s += 0.0005f * (k.radio - ms.radio_s);
+            ms.hp_l += k.hp_a * (m - ms.hp_l);
+            m -= ms.hp_l;
+            l += ms.radio_s * (m - l);
+            r += ms.radio_s * (m - r);
         }
         l = svf_lp(&ms.tone_l, l);
         r = svf_lp(&ms.tone_r, r);

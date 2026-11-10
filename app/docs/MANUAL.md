@@ -158,9 +158,10 @@ To play over a loop without adding to it, switch TAP to PLAY.
 
 **HOLD**: grow the music by planting notes. It starts with nothing planted, so you hear the scene on its own.
 
-- Tap a key to plant its note. It chimes once, then plays by itself every few seconds, a little differently each
-  time: a pluck in some octave, a two-note figure, a low swell or a high sparkle, in a bell, kalimba or piano
-  sound, somewhere left or right.
+- Tap a key to plant its note. It chimes once, then plays by itself on the beat, each planted note on its own
+  cycle of beats, so together they drift in and out of step. Now and then chance changes a repeat: an octave up, an
+  answer a fifth above, a low swell or a rest. It plays in the scene's own sound (or VOICE's), each note in its own
+  place left or right.
 - Tap a lit key to pull that note out.
 - Up to eight notes. A ninth replaces the oldest.
 - The lit keys are the notes planted. Leaving HOLD pulls them all.
@@ -182,8 +183,9 @@ Under the tabs, the looper says what it is doing and what to do next:
 - **FADING** or **KEPT**: the loop is playing. The line under it takes turns with tips: tap REC to keep it, tap
   again to let it fade, hold REC for a new loop.
 
-The lanes are the layers, the dots are their notes and the line is the playhead. On the right, each layer's level,
-OFF, or - when it is empty. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
+The lanes are the layers, the dots are their notes and the line is the playhead. A mark on the left shows which
+layers hold notes. On LAYERS, the layer K1 has picked is highlighted, with its number on the right and OFF, EMPTY or
+REDO when that applies. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
 
 **One loop, then another**: play a phrase, let it loop, keep it if you like. When you want something new, hold REC.
 The old loop stays in the library and the next thing you play starts a new one.
@@ -198,10 +200,10 @@ A loop holds up to eight layers. This page works on one at a time.
 | --- | --- |
 | LAYER | Picks the layer, 1 to 8. Its lane is marked and its number shows on the right |
 | LEVEL | That layer's level. All the way down is OFF, which mutes it |
-| REDO | Turn right to redo that layer: it plays on until you start playing, then what you play replaces it. Its lane pulses red while it waits. Turn left to change your mind |
+| REDO | Turn right to redo that layer: it plays on until your next phrase, which replaces it. With TAP on LISTEN that is when you start playing; on PLAY, when you tap REC to record over the loop. Its lane pulses red while it waits. Turn left to change your mind |
 | CLEAR | Turn right and the screen says PRESS REC TO CLEAR. Press REC within three seconds and that layer is erased. Turning left or waiting lets it go, so a knob turned by accident never erases anything |
 
-A new layer always starts at the same level, even where one was turned off before. When all eight are used, new
+A new layer always starts at the same level, whatever the layer before it in that place was set to. REDO keeps the level you set. When all eight are used, new
 notes go on layer 8.
 
 ### SHAPE (LFO again)
@@ -243,7 +245,7 @@ playing.
 | CHORD | AUTO lets the scene choose. Turn it to I to VII and the music moves to that chord of the key, then stays there. In C major, IV is F and VI is A minor. Playing doesn't move a chord you picked |
 | CHANGE | How often the chords move by themselves: STILL (they don't), SLOW, NORMAL or OFTEN |
 | PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. MINE is your own, played on the keys (below) |
-| COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a 2nd in place of the 3rd, airy |
+| COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a whole tone above the root in place of the 3rd, airy. SUS and OPEN only change a chord where the key has that note, so they never clash |
 
 **Your own progression**: on this page the keys pick chords instead of playing notes. Tap up to four keys in a
 row: each one is the chord built on that note of the key (a note outside the key counts as the one below it), and the
@@ -292,8 +294,9 @@ Turn ALGORITHM. Each space changes the whole sound, not just the reverb, and wor
 | GLITCH | The echoes stutter and jump between short times |
 | PULSE | The sound throbs and pans from side to side in eighth notes |
 
-DUB and GLITCH lean on the delay, so they sound like themselves even with DELAY low. The MOTION and FX knobs still
-work on top.
+DUB and GLITCH lean on the delay, so they sound like themselves even with DELAY low: DELAY and REPEATS can't go
+below their own level there. DUB keeps its echoes on a dotted eighth, so FX's TIME does nothing in DUB, and GLITCH
+picks its own times. Everything else on FX and MOTION works as usual.
 
 ## Looping
 
