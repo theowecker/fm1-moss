@@ -23,6 +23,7 @@
   #rec span { width: 36px; height: 36px; border-radius: 50%; background: var(--red); transition: border-radius .15s; }
   #rec.on span { border-radius: 6px; }
   #rec.on { border-color: var(--red); }
+  #listen[aria-pressed="true"] { border-color: var(--soft); color: var(--text); }
   .meter { flex: 1; height: 10px; background: var(--bg); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
   .meter i { display: block; height: 100%; width: 0; background: var(--cream); transition: width .05s; }
   #time { font-size: 28px; min-width: 110px; }
@@ -43,6 +44,7 @@
     <div class="row">
       <select id="input" aria-label="Audio input"></select>
       <button id="connect">Connect</button>
+      <button id="listen" aria-pressed="false" disabled>Play here</button>
     </div>
     <div class="row" style="margin-top:20px">
       <button id="rec" aria-label="Record (space)" disabled><span></span></button>
@@ -136,7 +138,7 @@
     } });
     const rate = stream.getAudioTracks()[0].getSettings().sampleRate || 44100;
     if (ctx) ctx.close();
-    ctx = new AudioContext({ sampleRate: rate });
+    ctx = new AudioContext({ sampleRate: rate, latencyHint: 'interactive' });
     await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })));
     src = ctx.createMediaStreamSource(stream);
     node = new AudioWorkletNode(ctx, 'tap', { numberOfInputs: 1, numberOfOutputs: 0, channelCount: 2 });
@@ -156,8 +158,12 @@
       }
     };
     src.connect(node);
+    monitor = ctx.createGain();
+    monitor.gain.value = listening ? 1 : 0;
+    src.connect(monitor).connect(ctx.destination);
     await ctx.resume();
     $('rec').disabled = false;
+    $('listen').disabled = false;
     $('status').textContent = 'Ready. Press the button or space to record.';
   }
 
@@ -233,6 +239,21 @@
       ul.appendChild(li);
     }
   }
+
+  /* the FM-1 through this computer's speakers or headphones; remembered for next time */
+  let monitor = null, listening = false;
+  try { listening = localStorage.getItem('moss-listen') === '1'; } catch (e) {}
+  const showListen = () => {
+    $('listen').setAttribute('aria-pressed', String(listening));
+    $('listen').textContent = listening ? 'Playing here' : 'Play here';
+  };
+  showListen();
+  $('listen').onclick = () => {
+    listening = !listening;
+    try { localStorage.setItem('moss-listen', listening ? '1' : '0'); } catch (e) {}
+    if (monitor) monitor.gain.setTargetAtTime(listening ? 1 : 0, ctx.currentTime, 0.02);
+    showListen();
+  };
 
   $('connect').onclick = () => connect().catch(e => { $('status').textContent = 'Could not open that input: ' + e.message; });
   $('rec').onclick = toggle;

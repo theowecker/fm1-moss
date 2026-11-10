@@ -97,7 +97,7 @@ static void settings_defaults(void)
     set.loop[0] = 30, set.loop[1] = 25, set.loop[2] = 30, set.loop[3] = 1;
     set.tape[3] = 30;                     /* SMEAR */
     set.fx[0] = 30, set.fx[1] = 2, set.fx[2] = 45, set.fx[3] = 20;
-    set.motion[0] = 25, set.motion[1] = 20, set.motion[2] = 30, set.motion[3] = 70;
+    set.motion[0] = 15, set.motion[1] = 0, set.motion[2] = 30, set.motion[3] = 70;
 }
 
 static int knob_ok(int page, int i, int v)

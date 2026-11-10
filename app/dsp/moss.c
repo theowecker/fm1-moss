@@ -2274,11 +2274,19 @@ static void seeds_clear(void)
     seeds_vis();
 }
 
-/* HOLD: a tap plants a note, which then plays now and then by itself in ways chance picks; a second tap takes it out.
- * The eighth seed makes room by taking the place of the oldest */
+static float beat_sec(void) { return 60.0f / (float)st.tempo; }
+
+/* HOLD: a tap plants a note, a second tap pulls it. Each planted note repeats on its own cycle of whole beats (5, 7,
+ * 6, 9...), in the scene's own voice, so together they phase against each other like tape loops of different
+ * lengths and always land on the beat. Chance only colours each repeat: now and then an octave up, an answer a
+ * fifth above, a low swell or a rest. The eighth seed makes room by taking the place of the oldest */
+static const uint8_t SEED_CYCLE[8] = {5, 7, 6, 9, 11, 8, 13, 10};
+static const float SEED_PAN[8] = {-0.45f, 0.45f, -0.2f, 0.3f, -0.6f, 0.6f, 0.0f, -0.35f};
+
 static void hold_toggle(int note, float vel)
 {
     int i, free = -1;
+    float beat = beat_sec(), into;
     for (i = 0; i < 8; i++) {
         if (kb.seed[i] == note) {
             kb.seed[i] = -1;
@@ -2296,32 +2304,33 @@ static void hold_toggle(int note, float vel)
         free = 7;
     }
     kb.seed[free] = (int8_t)note;
-    kb.seed_t[free] = 0.3f + 0.6f * frand();
-    voice_start(V_BELL, clamp(snap_note(note), 36, 96), 0.3f + 0.3f * vel, SRC_KEYS, (int32_t)(0.5f * MS_SR), 0.005f, 2.0f,
-                frand2() * 0.5f);
+    into = bar_pos() / MS_SR;
+    into -= fm_floorf(into / beat) * beat;
+    kb.seed_t[free] = (beat - into) + beat * (float)(SEED_CYCLE[free] / 2);   /* first repeat on a beat */
+    voice_start(key_kind(), clamp(snap_note(note), 36, 96), 0.3f + 0.2f * vel, SRC_KEYS, (int32_t)(0.6f * MS_SR), 0.005f,
+                2.0f, SEED_PAN[free]);
     plant(note);
     seeds_vis();
 }
 
-/* a seed plays: a pluck in some octave, a little figure, a soft swell or a high sparkle, in some voice */
-static void seed_play(int note)
+static void seed_play(int i)
 {
-    static const uint8_t KIND[4] = {V_BELL, V_KALIMBA, V_SOFTBELL, V_EP};
-    int n = clamp(snap_note(note), 36, 96), kind = KIND[irand(4)];
-    float r = frand(), vel = 0.25f + 0.35f * frand(), pan = frand2() * 0.8f;
-    int32_t gate = (int32_t)((0.3f + 0.9f * frand()) * MS_SR);
-    if (r < 0.45f) {
-        int oct = irand(3) - 1;
-        voice_start(kind, clamp(n + 12 * oct, 36, 96), vel, SRC_KEYS, gate, 0.004f, 1.5f, pan);
-    } else if (r < 0.7f) {
-        int second = frand() < 0.5f ? n + 7 : scale_step(n, frand() < 0.5f ? 1 : -1);
-        voice_start(kind, n, vel, SRC_KEYS, gate, 0.004f, 1.5f, pan);
-        ev_add((int32_t)((0.15f + 0.3f * frand()) * MS_SR), EV_NOTE, kind, clamp(second, 36, 96), vel * 0.8f, SRC_KEYS,
+    int n = clamp(snap_note(kb.seed[i]), 36, 96), kind = key_kind();
+    float r = frand(), vel = 0.32f + 0.12f * frand(), pan = SEED_PAN[i];
+    int32_t gate = (int32_t)(0.8f * beat_sec() * MS_SR);
+    if (r < 0.06f)
+        return;                          /* a rest */
+    if (r < 0.70f) {
+        voice_start(kind, n, vel, SRC_KEYS, gate, 0.004f, 1.8f, pan);
+    } else if (r < 0.84f) {
+        voice_start(kind, clamp(n + 12, 36, 96), vel * 0.7f, SRC_KEYS, gate, 0.004f, 2.2f, pan);
+    } else if (r < 0.94f) {
+        voice_start(kind, n, vel, SRC_KEYS, gate, 0.004f, 1.8f, pan);
+        ev_add((int32_t)(beat_sec() * MS_SR), EV_NOTE, kind, clamp(scale_step(n + 6, 1), 36, 96), vel * 0.75f, SRC_KEYS,
                gate, -pan);
-    } else if (r < 0.9f) {
-        voice_start(V_PAD, clamp(n - 12, 36, 96), vel * 0.8f, SRC_KEYS, (int32_t)(2.0f * MS_SR), 1.2f, 3.0f, pan);
     } else {
-        voice_start(V_BELL, clamp(n + 24, 36, 100), vel * 0.6f, SRC_KEYS, gate, 0.002f, 2.5f, pan);
+        voice_start(V_PAD, clamp(n - 12, 36, 96), vel * 0.7f, SRC_KEYS, (int32_t)(2.0f * beat_sec() * MS_SR), 1.0f,
+                    3.0f, pan);
     }
 }
 
@@ -2332,8 +2341,8 @@ static void seeds_tick(float dt)
         return;
     for (i = 0; i < 8; i++)
         if (kb.seed[i] >= 0 && (kb.seed_t[i] -= dt) <= 0.0f) {
-            seed_play(kb.seed[i]);
-            kb.seed_t[i] = (1.2f + 4.5f * frand() * frand()) / (1.0f + kb.energy);
+            seed_play(i);
+            kb.seed_t[i] += beat_sec() * (float)SEED_CYCLE[i];   /* added, not set, so it stays on the beat */
         }
 }
 
