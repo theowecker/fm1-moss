@@ -9,7 +9,8 @@ picks up what you play.
 
 - **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
-- **SELECT** steps through the pages in order: the sound (HOME, MIX, FX, MOTION), the beat, the keys and SETUP.
+- **SELECT** steps through the pages in order: the sound (HOME, MIX, FX, MOTION), the beat, the keys, CHORDS and
+  SETUP.
   The loop pages have their own screen: press LFO. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
 - **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
@@ -28,7 +29,7 @@ picks up what you play.
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
 | LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
 | FX | The FX page. Press again for MOTION |
-| GLO | The SETUP page |
+| GLO | The SETUP page. Press again for CHORDS |
 | K1 to K4 | The four knobs of the page you are on |
 | REC | The looper: tap to keep the loop from fading (tap again to let it fade). Hold for a second to clear it. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
@@ -231,6 +232,24 @@ Your last eight loops, kept for you. The LOOPS screen lists them, newest first, 
 | --- | --- |
 | LOOP | Turn to a loop and it starts playing |
 | DELETE | Turn right, then press REC within three seconds: that loop is taken out of the library |
+
+### CHORDS (GLO twice)
+
+The harmony under everything, always in the KEY and MOOD on SETUP. The studio screen's wheel shows the chord
+playing.
+
+| Knob | What it does |
+| --- | --- |
+| CHORD | AUTO lets the scene choose. Turn it to I to VII and the music moves to that chord of the key, then stays there. In C major, IV is F and VI is A minor. Playing doesn't move a chord you picked |
+| CHANGE | How often the chords move by themselves: STILL (they don't), SLOW, NORMAL or OFTEN |
+| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV |
+| COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a 2nd in place of the 3rd, airy |
+
+LOFI changes chord on the next bar, so it stays in time with the beat. SCAPES and DRIFT drift into it within a second.
+
+**Two chords, slowly**: CHANGE to SLOW, PATH to DRONE.
+
+**Stay on one**: CHORD to VI for a minor, wistful hold. Turn it to IV later for a lift.
 
 ### SETUP (GLO)
 

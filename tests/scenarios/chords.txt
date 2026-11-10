@@ -1,0 +1,28 @@
+# CHORDS: CHORD moves the music to a degree of the key and keeps it there; COLOR changes the chord; STILL holds it
+wait 600
+tap GLO
+tap GLO
+wait 50
+expect page 10
+turn K1 4
+wait 3000
+expect chordroot 5
+shot chords-page.png
+turn K4 2
+wait 100
+expect chordkind 6
+turn K2 -2
+turn K1 -4
+wait 6000
+expect chordroot 5
+turn K4 -2
+turn K2 2
+tap SEQ
+wait 1500
+shot chords-studio.png
+turn PRESET 1
+wait 2000
+expect mode 0
+turn K1 2
+wait 4500
+expect chordroot 2

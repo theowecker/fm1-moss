@@ -13,7 +13,7 @@
 const char *const MS_MODE_NAME[MS_NMODES] = {"LOFI", "SCAPES", "DRIFT"};
 const char *const MS_MOOD_NAME[MS_NMOODS] = {"MAJOR", "MINOR", "DORIAN", "LYDIAN", "MIXOLYD"};
 const char *const MS_NOTE_NAME[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
-const char *const MS_CHORD_SUFFIX[] = {"maj7", "m7", "7", "m7b5", "", "m", "sus"};
+const char *const MS_CHORD_SUFFIX[] = {"maj7", "m7", "7", "m7b5", "", "m", "sus", "sus2", "dim"};
 const char *const MS_MACRO_NAME[MS_NMODES][MS_NMACRO] = {
     {"TONE", "DUST", "WOBBLE", "REVERB"},
     {"WEATHER", "LIFE", "TONE", "REVERB"},
@@ -217,7 +217,7 @@ static void pan_gains(float pan, float *l, float *r)   /* equal power, pan -1..1
 }
 
 enum { C_MODE, C_MACRO, C_MIX, C_TEMPO, C_ROOT, C_MOOD, C_PLAY, C_FREEZE, C_NEW, C_NOTE, C_PANIC, C_SEED, C_SHED, C_KEYSET,
-       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION };
+       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION, C_CHORDS };
 typedef struct {
     uint8_t type;
     int16_t a, b;
@@ -290,6 +290,21 @@ static struct {
     int tones[5];                      /* semitones above the key root: root, 3rd, 5th, 7th, 9th */
 } hm;
 
+/* CHORDS: the player's say over the harmony. lock: -1 the scene picks, else the degree it stays on; rate: how often
+ * chords move (STILL, SLOW, NORMAL, OFTEN); path: the scene's own progression or one of PATHS; color: LUSH, PLAIN,
+ * SUS, OPEN */
+static struct {
+    int lock, rate, path, color;
+} hc = {-1, 2, 0, 0};
+static const int8_t PATHS[5][4] = {
+    {5, 1, 4, 0},                      /* CIRCLE: vi ii V I */
+    {0, 5, 3, 4},                      /* DREAM: I vi IV V */
+    {5, 3, 0, 4},                      /* MOODY: vi IV I V */
+    {0, 4, 5, 3},                      /* SONG: I V vi IV */
+    {0, 3, 0, 3},                      /* DRONE: I IV */
+};
+static const float RATE_MUL[4] = {0.0f, 2.0f, 1.0f, 0.5f};   /* times the scene's chord length; 0: never by itself */
+
 static int deg_semis(int deg)   /* any octave, including negative degrees */
 {
     int oct = deg >= 0 ? deg / 7 : -((6 - deg) / 7);
@@ -306,7 +321,14 @@ static void chord_set(int degree)
     third = hm.tones[1] - hm.tones[0];
     fifth = hm.tones[2] - hm.tones[0];
     seventh = hm.tones[3] - hm.tones[0];
-    if (third == 4 && seventh == 11)
+    if (hc.color == 1) {                 /* PLAIN: the 7th and 9th become the root and 5th an octave up */
+        hm.tones[3] = hm.tones[0] + 12;
+        hm.tones[4] = hm.tones[2] + 12;
+        ms_vis.chord_kind = fifth == 6 ? MS_CHORD_DIM : third == 4 ? MS_CHORD_MAJ : MS_CHORD_MIN;
+    } else if (hc.color >= 2) {          /* SUS and OPEN: the 3rd moves to the 4th or the 2nd */
+        hm.tones[1] = deg_semis(hm.degree + (hc.color == 2 ? 3 : 1));
+        ms_vis.chord_kind = hc.color == 2 ? MS_CHORD_SUS : MS_CHORD_SUS2;
+    } else if (third == 4 && seventh == 11)
         ms_vis.chord_kind = MS_CHORD_MAJ7;
     else if (third == 4)
         ms_vis.chord_kind = MS_CHORD_DOM7;
@@ -319,6 +341,31 @@ static void chord_set(int degree)
     ms_vis.chord_mask = mask;
     ms_vis.chord_root = (int8_t)((st.root + hm.tones[0]) % 12);
 }
+
+/* the degree the progression goes to next, from the scene's own (prog, NULL for DRIFT's wandering) or CHORDS' */
+static int chord_next(const int8_t *prog, int peek)
+{
+    static const int8_t MOVE[] = {3, 4, -3, 2, 5, -2, 3, 4};   /* mostly fourths and fifths, sometimes thirds */
+    int i = (hm.prog_i + 1) & 3;
+    if (hc.lock >= 0)
+        return hc.lock;
+    if (!peek && hm.pending >= 0)
+        return hm.pending;
+    if (!peek)
+        hm.prog_i = i;
+    if (hc.path > 0)
+        return PATHS[hc.path - 1][i];
+    return prog ? prog[i] : hm.degree + MOVE[irand(8)];
+}
+
+/* STILL with no chord asked for: the chord stays as it is */
+static int chord_stays(void)
+{
+    return !hc.rate && hc.lock < 0 && hm.pending < 0;
+}
+
+/* how long until the next chord, from the scene's own length: CHANGE's STILL waits until CHORD asks for one */
+static float chord_wait(float secs) { return hc.rate == 0 ? 1e9f : secs * RATE_MUL[hc.rate]; }
 
 static int chord_note_near(int i, int centre)
 {
@@ -1357,10 +1404,12 @@ static void lofi_step(void)
     int32_t hum = (int32_t)(frand() * 0.006f * MS_SR);
     int next_root, n;
     if (s == 0) {
-        if (++hm.bar_in_chord >= ls->bars_per_chord) {
+        int bars = hc.rate == 3 ? (ls->bars_per_chord > 1 ? ls->bars_per_chord / 2 : 1)
+                 : hc.rate == 1 ? ls->bars_per_chord * 2 : ls->bars_per_chord;
+        ++hm.bar_in_chord;
+        if ((hc.rate && hm.bar_in_chord >= bars) || (hc.lock >= 0 && hc.lock != hm.degree)) {
             hm.bar_in_chord = 0;
-            hm.prog_i = (hm.prog_i + 1) & 3;
-            chord_set(ls->prog[hm.prog_i]);
+            chord_set(chord_next(ls->prog, 0));
         }
         if (hm.bar_in_chord == 0) {
             lofi_chord_hit(ls->pad > 0.0f ? 0.6f : 0.75f, 4, (int32_t)(sixteenth * (float)(10 * ls->bars_per_chord)));
@@ -1378,7 +1427,7 @@ static void lofi_step(void)
         bass_note(36 + ((st.root + (frand() < 0.5f ? hm.tones[2] : hm.tones[0])) % 12), 0.7f,
                   (int32_t)(sixteenth * 3.0f), 0.0f, 0.004f);
     if (s == 14 && bt.bass == BASS_AUTO && frand() < 0.3f) {   /* approach the next root from a semitone below */
-        int nd = ls->prog[(hm.prog_i + 1) & 3];
+        int nd = chord_next(ls->prog, 1);
         next_root = (st.root + deg_semis(nd)) % 12;
         bass_note(36 + ((next_root + 11) % 12), 0.6f, (int32_t)(sixteenth * 1.6f), 0.0f, 0.004f);
     }
@@ -1417,11 +1466,14 @@ static void pad_chord(int ntones, float atk, float rel)
 static void scapes_next_chord(void)
 {
     const scape_style_t *ss = &SCAPE_STYLE[st.scene];
-    hm.prog_i = (hm.prog_i + 1) & 3;
-    chord_set(hm.pending >= 0 ? hm.pending : ss->prog[hm.prog_i]);
+    if (chord_stays()) {
+        seq.chord_t = 1e9f;
+        return;
+    }
+    chord_set(chord_next(ss->prog, 0));
     hm.pending = -1;
     pad_chord(4, 4.0f, 7.0f);
-    seq.chord_t = ss->chord_secs * (0.8f + 0.4f * frand());
+    seq.chord_t = chord_wait(ss->chord_secs * (0.8f + 0.4f * frand()));
 }
 
 static void scapes_note(void)
@@ -1502,14 +1554,17 @@ static void lush_chord(void)
 
 static void drift_next_chord(void)
 {
-    static const int8_t MOVE[] = {3, 4, -3, 2, 5, -2, 3, 4};   /* mostly fourths and fifths, sometimes thirds */
-    chord_set(hm.pending >= 0 ? hm.pending : hm.degree + MOVE[irand(8)]);
+    if (chord_stays()) {
+        seq.chord_t = 1e9f;
+        return;
+    }
+    chord_set(chord_next((const int8_t *)0, 0));
     hm.pending = -1;
     if (bt.bass == BASS_AUTO)
         bass_note(36 + ((st.root + hm.tones[0]) % 12), 0.8f, -1, 1.6f, 2.5f);
     if (DRIFT_STYLE[st.scene].lush)
         lush_chord();
-    seq.chord_t = (150.0f - 135.0f * k.drift) * (0.7f + 0.6f * frand()) * DRIFT_STYLE[st.scene].chord_time;
+    seq.chord_t = chord_wait((150.0f - 135.0f * k.drift) * (0.7f + 0.6f * frand()) * DRIFT_STYLE[st.scene].chord_time);
 }
 
 static void drift_step(void)   /* every quarter note */
@@ -1675,7 +1730,8 @@ static void mode_start(void)
         ms_vis.beat_len = 16;
         ms_vis.drums[1] = LOFI_STYLE[st.scene].snare;
         ms_vis.drums[2] = LOFI_STYLE[st.scene].hat;
-        chord_set(LOFI_STYLE[st.scene].prog[0]);
+        hm.prog_i = 0;
+        chord_set(hc.lock >= 0 ? hc.lock : hc.path > 0 ? PATHS[hc.path - 1][0] : LOFI_STYLE[st.scene].prog[0]);
         break;
     case MODE_SCAPES:
         crickets_init(SCAPE_STYLE[st.scene].crickets);
@@ -1688,7 +1744,8 @@ static void mode_start(void)
         seq.note_acc = 3.0f;
         break;
     case MODE_DRIFT:
-        chord_set(0);
+        hm.prog_i = 0;
+        chord_set(hc.lock >= 0 ? hc.lock : hc.path > 0 ? PATHS[hc.path - 1][0] : 0);
         drift_regrow();
         if (bt.bass == BASS_AUTO)
             bass_note(36 + st.root % 12, 0.8f, -1, 1.6f, 3.0f);
@@ -2192,7 +2249,7 @@ static void plant(int note)
         seq.mel_pool[seq.mel_n++ & 3] = (int8_t)note;
         return;
     }
-    if (!(ms_vis.chord_mask >> pc & 1u) && !st.frozen) {
+    if (!(ms_vis.chord_mask >> pc & 1u) && !st.frozen && hc.lock < 0) {
         int d = degree_with(pc);
         if (d >= 0) {
             hm.pending = d;
@@ -2595,6 +2652,25 @@ static void drain(void)
             }
             break;
         }
+        case C_CHORDS:
+            if (c.a == 0) {
+                hc.lock = c.b > 0 ? clamp(c.b - 1, 0, 6) : -1;
+                if (hc.lock >= 0 && st.mode != MODE_LOFI && seq.chord_t > 1.0f)
+                    seq.chord_t = 0.5f + 0.5f * frand();   /* soon, not on the spot: LOFI waits for its next bar */
+            } else if (c.a == 1) {
+                int was = hc.rate;
+                hc.rate = clamp(c.b, 0, 3);
+                if (st.mode != MODE_LOFI && hc.rate && (was == 0 || seq.chord_t > 60.0f))
+                    seq.chord_t = 4.0f + 4.0f * frand();
+                else if (st.mode != MODE_LOFI && !hc.rate)
+                    seq.chord_t = 1e9f;
+            } else if (c.a == 2) {
+                hc.path = clamp(c.b, 0, 5);
+            } else {
+                hc.color = clamp(c.b, 0, 3);
+                chord_set(hm.degree);
+            }
+            break;
         case C_MOTION:
             motion_set(c.a & 3, c.b);
             break;
@@ -3249,6 +3325,7 @@ void ms_loop(int clear) { post(C_LOOP, clear, 0); }
 void ms_loop_set(int i, int v) { post(C_LOOPSET, i, v); }
 void ms_loop_fx(int i, int v) { post(C_LOOPFX, i, v); }
 void ms_motion(int i, int v) { post(C_MOTION, i, v); }
+void ms_chords(int i, int v) { post(C_CHORDS, i, v); }
 void ms_fx(int i, int v) { post(C_FX, i, v); }
 void ms_space(int sp) { post(C_SPACE, sp, 0); }
 void ms_beat(int i, int v) { post(C_BEAT, i, v); }

@@ -55,6 +55,9 @@ void ms_loop(int clear);               /* 0: advance record, play, overdub, play
 void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
 void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */
 void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spread, 0..100 */
+/* CHORDS: 0 chord (0 AUTO, 1..7 the degree to stay on), 1 change (STILL, SLOW, NORMAL, OFTEN), 2 path (SCENE,
+ * CIRCLE, DREAM, MOODY, SONG, DRONE), 3 color (LUSH, PLAIN, SUS, OPEN) */
+void ms_chords(int i, int v);
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */
 #define MS_NLAYERS 8
@@ -130,5 +133,6 @@ typedef struct {
 } ms_vis_t;
 extern ms_vis_t ms_vis;
 
-enum { MS_CHORD_MAJ7, MS_CHORD_MIN7, MS_CHORD_DOM7, MS_CHORD_HALFDIM, MS_CHORD_MAJ, MS_CHORD_MIN, MS_CHORD_SUS };
+enum { MS_CHORD_MAJ7, MS_CHORD_MIN7, MS_CHORD_DOM7, MS_CHORD_HALFDIM, MS_CHORD_MAJ, MS_CHORD_MIN, MS_CHORD_SUS,
+       MS_CHORD_SUS2, MS_CHORD_DIM };
 extern const char *const MS_CHORD_SUFFIX[];
