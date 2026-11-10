@@ -653,7 +653,7 @@ static void drums_view(rgb_t acc)
     t[0] = 0;
     text_cat(t, b[0] ? MS_KIT_NAME[b[0]] : "NO");
     text_cat(t, " KIT, ");
-    text_cat(t, b[1] == PAT_MINE ? "YOUR PATTERN" : MS_PATTERN_NAME[b[1]]);
+    text_cat(t, MS_PATTERN_NAME[b[1]]);
     centred(56, &FONT_T, t, ST_TEXT);
     centred(140, &FONT_T, "FIRST 16 KEYS ARE STEPS, HIGHER ONES DRUMS", ST_SOFT);
     centred(152, &FONT_T, "GLO REMOVES THIS DRUM'S STEPS", ST_SOFT);
@@ -670,7 +670,7 @@ static void bass_view(rgb_t acc)
     if (!mine) {
         text_cat(t, "BASS ");
         text_cat(t, MS_BASS_NAME[set.beat[set.mode][3]]);
-        text_cat(t, ". TAP A STEP FOR YOUR OWN");
+        text_cat(t, ". A STEP STARTS MY LINE");
     } else if (ms_vis.chord_root >= 0) {
         text_cat(t, "PLAYING UNDER ");
         text_cat(t, MS_NOTE_NAME[ms_vis.chord_root]);

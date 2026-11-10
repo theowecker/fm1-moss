@@ -10,18 +10,18 @@
 
 #define SET_MAGIC 0x4D4F5338u            /* "MOS8" */
 /* each screen's pages in the order SELECT walks them: the sound, the loops, the chords, the beat; SETUP with the sound */
-enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_EVOLVE, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_CHORDS, PG_BUILD, PG_PLAY,
+enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_TEXTURE, PG_EVOLVE, PG_KEYS, PG_LOOP, PG_SHAPE, PG_TAPE, PG_LIBRARY, PG_CHORDS, PG_BUILD, PG_PLAY,
        PG_BEAT, PG_DRUMS, PG_BASS, PG_SETUP, NPAGES };
 /* SEQ goes round the screens; SELECT walks the pages of the screen it is on */
 enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, VIEW_CHORDS, VIEW_BEAT, NVIEWS };
-static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "EVOLVE", "KEYS", "LAYERS", "SHAPE", "TAPE", "LIBRARY",
+static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "TEXTURE", "EVOLVE", "KEYS", "LAYERS", "SHAPE", "TAPE", "LIBRARY",
                                               "SIMPLE", "BUILD", "PLAY", "BEAT", "DRUMS", "BASS", "SETUP"};
-static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_FX, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_SEQ, B_SEQ, B_SEQ,
+static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_FX, B_FX, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_SEQ, B_SEQ, B_SEQ,
                                          B_SEL, B_SEL, B_SEL, B_HOME};
 static const char *const DRUM_NAME[MS_NDRUMS] = {"KICK", "SNARE", "GHOST", "HAT", "OPEN HAT", "PERC"};
 static const char *const BN_NAME[MS_NBN] = {"OFF", "ROOT", "3RD", "5TH", "7TH", "OCTAVE", "LEAD-IN"};
 static const char *const CHANGE_NAME[4] = {"STILL", "SLOW", "NORMAL", "OFTEN"};
-static const char *const PATH_NAME[8] = {"SCENE", "CIRCLE", "DREAM", "MOODY", "SONG", "DRONE", "MINE", "BUILT"};
+static const char *const PATH_NAME[8] = {"SCENE", "CIRCLE", "DREAM", "MOODY", "SONG", "DRONE", "TAPPED", "BUILT"};
 enum { PATH_MINE = 6, PATH_BUILT = 7 };
 /* BUILD's TYPE knob walks the chord kinds in this order, plain to coloured */
 static const uint8_t KIND_ORDER[MS_NCHORDS] = {
@@ -37,17 +37,18 @@ static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"
 static const char *const TAP_NAME[3] = {"PLAY", "LISTEN", "HOLD"};
 static const char *const SPEED_NAME[5] = {"1/2", "1x", "2x", "REV", "REV 1/2"};
 static const char *const PAGE_KNOBS[NPAGES][4] = {
-    {0}, {0}, {"DELAY", "TIME", "REPEATS", "FILM"}, {"MOD", "RANDOM", "TONE", "SPREAD"}, {"AMOUNT", "PACE", "CHORDS", "FILLS"},
+    {0}, {0}, {"DELAY", "TIME", "REPEATS", "FILM"}, {"MOD", "RANDOM", "TONE", "SPREAD"}, {"FILTER", "RESONATE", "LOSSY", "PUMP"},
+    {"AMOUNT", "PACE", "CHORDS", "FILLS"},
     {"SNAP", "HARMONY", "VOICE", "TAP"},
     {"LAYER", "LEVEL", "MUTE", "SHIFT"}, {"FADE", "MUTATE", "SHIFT", "SPEED"}, {"WARBLE", "DIRT", "AGE", "SMEAR"},
     {"LOOP", "", "", ""}, {"CHORD", "CHANGE", "PATH", "COLOR"}, {"CHORD", "ROOT", "TYPE", "LENGTH"},
-    {"TYPE", "VOICING", "STRUM", "FOLLOW"}, {"KIT", "PATTERN", "LEVEL", "BASS"}, {"DRUM", "LEVEL", "CHANCE", "SWING"},
-    {"NOTE", "TONE", "GLIDE", "LENGTH"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
+    {"TYPE", "VOICING", "STRUM", "FOLLOW"}, {"KIT", "PATTERN", "SWING", "LEVEL"}, {"DRUM", "LEVEL", "CHANCE", "SHIFT"},
+    {"BASS", "TONE", "GLIDE", "LENGTH"}, {"TEMPO", "KEY", "MOOD", "SLEEP"},
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
 static const uint8_t PAGE_STEPS[NPAGES][4] = {
-    {0}, {0}, {0, 5, 0, 0}, {0}, {0}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 7, 3}, {0}, {MS_NCHORDS, 3, 0, 1},
-    {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {0}, {MS_NBN - 2, 0, 0, 7}, {0},
+    {0}, {0}, {0, 5, 0, 0}, {0}, {0}, {0}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 7, 3}, {0}, {MS_NCHORDS, 3, 0, 1},
+    {MS_NKITS - 1, MS_NPATTERNS - 1, 9, 0}, {0}, {MS_NBASS - 1, 0, 0, 7}, {0},
 };
 #define PAT_MINE (MS_NPATTERNS - 1)
 #define BASS_MINE (MS_NBASS - 1)
@@ -82,7 +83,7 @@ typedef struct {
     uint8_t macro[MS_NMODES][MS_NMACRO];
     uint8_t mix[MS_NMODES][MS_NMIX];
     uint8_t tempo[MS_NMODES], mood[MS_NMODES];
-    uint8_t keys[4], loop[4], fx[4], tape[4], motion[4], evolve[4];
+    uint8_t keys[4], loop[4], fx[4], tape[4], motion[4], evolve[4], texture[4];
     uint8_t beat[MS_NMODES][4];          /* kit, pattern, level, bass */
     uint8_t chords[4];                   /* chord (0 AUTO, 1..7), change, path, color */
     uint8_t mine_n, mine[4];             /* PATH MINE: the progression played on the CHORDS page's keys, degrees 0..6 */
@@ -185,6 +186,7 @@ static int settings_ok(void)
     for (m = 0; m < 4; m++)
         if (!knob_ok(PG_KEYS, m, set.keys[m]) || !knob_ok(PG_SHAPE, m, set.loop[m]) || !knob_ok(PG_FX, m, set.fx[m])
             || !knob_ok(PG_TAPE, m, set.tape[m]) || !knob_ok(PG_MOTION, m, set.motion[m]) || set.evolve[m] > 100
+            || set.texture[m] > 100
             || !knob_ok(PG_CHORDS, m, set.chords[m]) || !knob_ok(PG_PLAY, m, set.play[m]))
             return 0;
     if (set.mine_n < 1 || set.mine_n > 4)
@@ -199,17 +201,17 @@ static int settings_ok(void)
             return 0;
     if (set.drum_sel >= MS_NDRUMS || set.swing > 9 || (set.drum_len != 12 && set.drum_len != 16) || set.drum_swing > 40)
         return 0;
-    for (m = 0; m < 4; m++)
-        if (!knob_ok(PG_BASS, m, set.bassx[m]))
-            return 0;
+    if (set.bassx[0] > MS_NBN - 2 || set.bassx[1] > 100 || set.bassx[2] > 100 || set.bassx[3] > 7)
+        return 0;
     for (m = 0; m < MS_NDRUMS; m++)
         if (set.drum_lvl[m] > 100 || set.drum_ch[m] > 100)
             return 0;
     for (m = 0; m < 16; m++)
         if (set.bass_line[m] >= MS_NBN)
             return 0;
-    for (m = 0; m < MS_NMODES * 4; m++)
-        if (!knob_ok(PG_BEAT, m % 4, set.beat[m / 4][m % 4]))
+    for (m = 0; m < MS_NMODES; m++)    /* kit, pattern, level, bass */
+        if (set.beat[m][0] >= MS_NKITS || set.beat[m][1] >= MS_NPATTERNS || set.beat[m][2] > 100
+            || set.beat[m][3] >= MS_NBASS)
             return 0;
     for (m = 0; m < MS_NMODES; m++) {
         int i;
@@ -286,6 +288,7 @@ static void send_all(void)
         ms_fx(i, set.fx[i]);
         ms_motion(i, set.motion[i]);
         ms_evolve(i, set.evolve[i]);
+        ms_texture(i, set.texture[i]);
         ms_chords(i, set.chords[i]);
         play_send(i);
     }
@@ -473,9 +476,9 @@ static void msg_join(char *t)
 static uint8_t *page_vals(int page)
 {
     return page == PG_KEYS ? set.keys : page == PG_SHAPE ? set.loop : page == PG_TAPE ? set.tape : page == PG_FX ? set.fx
-         : page == PG_MOTION ? set.motion : page == PG_EVOLVE ? set.evolve : page == PG_CHORDS ? set.chords
+         : page == PG_MOTION ? set.motion : page == PG_EVOLVE ? set.evolve : page == PG_TEXTURE ? set.texture : page == PG_CHORDS ? set.chords
          : page == PG_PLAY ? set.play
-         : page == PG_BEAT ? set.beat[set.mode] : page == PG_BASS ? set.bassx : 0;
+         : 0;
 }
 
 static const char *knob_name(int i)
@@ -499,7 +502,12 @@ static int knob_value(int i)   /* 0..100 */
         return i == 0 ? ui.sel_slot * 100 / 7 : 0;
     if (set.page == PG_DRUMS)
         return i == 0 ? set.drum_sel * 100 / (MS_NDRUMS - 1) : i == 1 ? set.drum_lvl[set.drum_sel]
-             : i == 2 ? set.drum_ch[set.drum_sel] : set.swing * 100 / 9;
+             : i == 2 ? set.drum_ch[set.drum_sel] : 50;
+    if (set.page == PG_BEAT)
+        return i == 0 ? set.beat[m][0] * 100 / (MS_NKITS - 1) : i == 1 ? set.beat[m][1] * 100 / (MS_NPATTERNS - 1)
+             : i == 2 ? set.swing * 100 / 9 : set.beat[m][2];
+    if (set.page == PG_BASS)
+        return i == 0 ? set.beat[m][3] * 100 / (MS_NBASS - 1) : i == 3 ? set.bassx[3] * 100 / 7 : set.bassx[i];
     if (set.page == PG_BUILD) {
         int j = ui.sel_chord, k;
         if (i == 0)
@@ -571,8 +579,8 @@ static void chord_key(int note, uint32_t now)
     mine_send();
     set_dirty = 1;
     {
-        char a[24] = "MINE ";
-        int_text(set.mine_n, a + 5);
+        char a[24] = "CHORD ";
+        int_text(set.mine_n, a + 6);
         text_cat(a, set.mine_n < 4 ? " OF 4" : " OF 4. DONE");
         t[0] = 0;
         degree_name(set.mine[set.mine_n - 1], t);
@@ -801,7 +809,7 @@ static int drums_mine(void)
     if (set.beat[m][1] != PAT_MINE) {
         char t[24] = "COPIED FROM ";
         float sw;
-        if (!replace_ok(own, "REPLACE YOUR PATTERN?"))
+        if (!replace_ok(own, "REPLACE MY BEAT?"))
             return 0;
         text_cat(t, set.beat[m][1] ? MS_PATTERN_NAME[set.beat[m][1]] : "THE SCENE");
         set.drum_len = (uint8_t)ms_pattern_rows(m, set.scene[m], set.beat[m][1], set.drum_row, &sw);
@@ -812,7 +820,7 @@ static int drums_mine(void)
         for (i = 0; i < MS_NDRUMS; i++)
             drum_send(i);
         ms_beat(1, PAT_MINE);
-        app_say("YOUR PATTERN", t);
+        app_say("MY BEAT", t);
         ui.copied = 1;
     }
     if (!set.beat[m][0]) {               /* no kit, nothing to hear */
@@ -829,7 +837,7 @@ static int bass_mine(void)
     uint16_t rows[MS_NDRUMS];
     if (set.beat[m][3] == BASS_MINE)
         return 1;
-    if (!replace_ok(own, "REPLACE YOUR LINE?"))
+    if (!replace_ok(own, "REPLACE MY LINE?"))
         return 0;
     len = beat_rows(rows);               /* from what it played: ROOT on the kicks, WALK's four, else the root on 1 */
     for (i = 0; i < 16; i++)
@@ -907,6 +915,53 @@ static void bass_key(int k)
     step_say("BASS", k, BN_NAME[set.bass_line[k]]);
 }
 
+/* BEAT: KIT, PATTERN, SWING, LEVEL. BASS: the bass's style, then TONE, GLIDE, LENGTH */
+static void beat_turn(int i, int32_t d)
+{
+    uint8_t *b = set.beat[set.mode];
+    char t[16];
+    if (set.page == PG_BEAT && i == 2) {
+        set.swing = (uint8_t)clamp(set.swing + d, 0, 9);
+        ms_beat(4, set.swing);
+    } else if (set.page == PG_BEAT) {
+        int f = i == 3 ? 2 : i;          /* LEVEL is the third of a mode's beat settings */
+        b[f] = (uint8_t)clamp(b[f] + (f == 2 ? 2 * d : d), 0, f == 0 ? MS_NKITS - 1 : f == 1 ? MS_NPATTERNS - 1 : 100);
+        ms_beat(f, b[f]);
+    } else if (i == 0) {
+        b[3] = (uint8_t)clamp(b[3] + d, 0, MS_NBASS - 1);
+        ms_beat(3, b[3]);
+    } else {
+        set.bassx[i] = (uint8_t)clamp(set.bassx[i] + (i == 3 ? d : 2 * d), 0, i == 3 ? 7 : 100);
+        bassx_send(i);
+    }
+    set_dirty = 1;
+    if (set.page == PG_BEAT && i == 1 && !b[0]) {
+        app_say(MS_PATTERN_NAME[b[1]], "PICK A KIT FIRST");
+        return;
+    }
+    knob_text(i, t);
+    app_say(PAGE_KNOBS[set.page][i], t);
+}
+
+/* SHIFT: the picked drum's steps a sixteenth later or earlier, round the bar */
+static void drums_shift(int32_t d)
+{
+    uint16_t rows[MS_NDRUMS], r;
+    int len = beat_rows(rows), n = d < 0 ? -d : d, sel = set.drum_sel;
+    if (!drums_mine())
+        return;
+    r = set.drum_row[sel];
+    while (n--) {
+        uint16_t mask = (uint16_t)((1u << len) - 1u);
+        r = d > 0 ? (uint16_t)(((r << 1) | (r >> (len - 1))) & mask) : (uint16_t)(((r >> 1) | (r << (len - 1))) & mask);
+    }
+    set.drum_row[sel] = r;
+    set.own |= 1u;
+    drum_send(sel);
+    if (!ui.copied)
+        app_say(DRUM_NAME[sel], d > 0 ? "LATER" : "EARLIER");
+}
+
 static void drums_turn(int i, int32_t d)
 {
     int r = set.drum_sel;
@@ -916,8 +971,9 @@ static void drums_turn(int i, int32_t d)
         ui.confirm[3] = 0;
         ms_beat(8, set.drum_sel);
     } else if (i == 3) {
-        set.swing = (uint8_t)clamp(set.swing + d, 0, 9);
-        ms_beat(4, set.swing);
+        ui.copied = 0;
+        drums_shift(d);
+        return;
     } else {
         uint8_t *v = i == 1 ? &set.drum_lvl[r] : &set.drum_ch[r];
         ui.copied = 0;
@@ -979,21 +1035,35 @@ static void knob_text(int i, char *t)
     if (set.page == PG_DRUMS) {
         if (i == 0)
             text_cat(t, DRUM_NAME[set.drum_sel]);
-        else if (i == 3 && !set.swing)
-            text_cat(t, "AUTO");
+        else if (i == 3)
+            text_cat(t, "< >");
         else {
-            int_text(i == 1 ? set.drum_lvl[set.drum_sel] : i == 2 ? set.drum_ch[set.drum_sel] : 48 + 2 * set.swing, t);
-            if (i > 1)
+            int_text(i == 1 ? set.drum_lvl[set.drum_sel] : set.drum_ch[set.drum_sel], t);
+            if (i == 2)
                 text_cat(t, "%");
         }
         return;
     }
-    if (set.page == PG_BASS && i != 1 && i != 2) {
-        if (i == 0) {
-            text_cat(t, BN_NAME[set.bassx[0] + 1]);
+    if (set.page == PG_BEAT) {
+        const uint8_t *b = set.beat[m];
+        if (i == 2 && set.swing) {
+            int_text(48 + 2 * set.swing, t);
+            text_cat(t, "%");
+        } else if (i == 3) {
+            int_text(b[2], t);
         } else {
+            text_cat(t, i == 0 ? MS_KIT_NAME[b[0]] : i == 1 ? MS_PATTERN_NAME[b[1]] : "AUTO");
+        }
+        return;
+    }
+    if (set.page == PG_BASS) {
+        if (i == 0) {
+            text_cat(t, MS_BASS_NAME[set.beat[m][3]]);
+        } else if (i == 3) {
             int_text(set.bassx[3] + 1, t);
             text_cat(t, "/16");
+        } else {
+            int_text(set.bassx[i], t);
         }
         return;
     }
@@ -1027,10 +1097,6 @@ static void knob_text(int i, char *t)
         int kind = p[0] ? KIND_ORDER[p[0] - 1] : 0;
         text_cat(t, i == 0 ? (!p[0] ? "KEY" : kind == MS_CHORD_MAJ ? "maj" : MS_CHORD_SUFFIX[kind])
                     : i == 1 ? VOICING_NAME[p[1]] : p[3] ? "ON" : "OFF");
-    }
-    else if (set.page == PG_BEAT && i != 2) {
-        const uint8_t *b = set.beat[m];
-        text_cat(t, i == 0 ? MS_KIT_NAME[b[0]] : i == 1 ? MS_PATTERN_NAME[b[1]] : MS_BASS_NAME[b[3]]);
     }
     else if (set.page != PG_SETUP)
         int_text(knob_value(i), t);
@@ -1311,6 +1377,9 @@ static void knob_turn(int i, int32_t d)
     } else if (set.page == PG_DRUMS) {
         drums_turn(i, d);
         return;
+    } else if (set.page == PG_BEAT || set.page == PG_BASS) {
+        beat_turn(i, d);
+        return;
     } else if (set.page == PG_LOOP || set.page == PG_LIBRARY || (set.page == PG_SHAPE && i == 2)) {
         if (!pages_act(i, d))
             say_knob(i);
@@ -1319,9 +1388,7 @@ static void knob_turn(int i, int32_t d)
         uint8_t *v = page_vals(set.page);
         int steps = PAGE_STEPS[set.page][i];
         v[i] = (uint8_t)clamp(v[i] + (steps ? d : 2 * d), 0, steps ? steps : 100);
-        if (set.page == PG_BEAT)
-            ms_beat(i, v[i]);
-        else if (set.page == PG_KEYS)
+        if (set.page == PG_KEYS)
             ms_keys(i, v[i]);
         else if (set.page == PG_SHAPE)
             ms_loop_set(i, v[i]);
@@ -1329,6 +1396,8 @@ static void knob_turn(int i, int32_t d)
             tape_send(i);
         else if (set.page == PG_MOTION)
             ms_motion(i, v[i]);
+        else if (set.page == PG_TEXTURE)
+            ms_texture(i, v[i]);
         else if (set.page == PG_EVOLVE) {
             ms_evolve(i, v[i]);
             if (!v[0] && !v[2] && !v[3]) {
@@ -1347,10 +1416,6 @@ static void knob_turn(int i, int32_t d)
             play_send(i);
             if (i == 0)
                 ui.play_shown = 0;
-        } else if (set.page == PG_BASS) {
-            bassx_send(i);
-            if (i == 0)
-                ms_beat(9, set.bassx[0] + 1);
         }
         else
             ms_fx(i, v[i]);
@@ -1739,7 +1804,8 @@ static void input(void)
             page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_TAPE : set.page == PG_TAPE ? PG_LIBRARY : PG_LOOP);
             break;
         case B_FX:
-            page_set(set.page == PG_FX ? PG_MOTION : set.page == PG_MOTION ? PG_EVOLVE : PG_FX);
+            page_set(set.page == PG_FX ? PG_MOTION : set.page == PG_MOTION ? PG_TEXTURE
+                     : set.page == PG_TEXTURE ? PG_EVOLVE : PG_FX);
             break;
         case B_GLO:
             ui.glo_t = now | 1u;

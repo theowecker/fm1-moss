@@ -4,7 +4,7 @@ turn SELECT -1
 turn K1 20
 turn PRESET -3
 wait 300
-expect page 16
+expect page 17
 press SAVE
 wait 6500
 release SAVE

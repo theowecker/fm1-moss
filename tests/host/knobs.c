@@ -127,6 +127,7 @@ static void set_space(int i, int v) { (void)i; ms_space(v); }   /* against HALL 
 /* the knobs that shape the repeats are heard with the repeats up, as they are used */
 static void set_wet_fx(int i, int v) { ms_fx(0, 60); ms_fx(i, v); }
 static void set_wet_motion(int i, int v) { ms_fx(0, 60); ms_motion(i, v); }
+static void set_pump(int i, int v) { ms_beat(0, 1); ms_texture(i, v); }   /* PUMP ducks on the kick */
 static void set_beat_on(int i, int v) { ms_beat(0, 1); ms_beat(i, v); }   /* PATTERN and LEVEL need a kit */
 /* the loop's tape is heard on a loop that is kept, not one fading away */
 static void set_tape(int i, int v) { keep_loop = 1; if (i == 3) ms_loop_set(2, v); else ms_loop_fx(i, v); }
@@ -141,6 +142,8 @@ int main(int argc, char **argv)
         {"FX", "FILM", ms_fx, 3, 0, 100},
         {"MOTION", "MOD", set_wet_motion, 0, 0, 100}, {"MOTION", "RANDOM", ms_motion, 1, 0, 100},
         {"MOTION", "TONE", set_wet_motion, 2, 0, 100}, {"MOTION", "SPREAD", set_wet_motion, 3, 0, 100},
+        {"TEXTURE", "FILTER", ms_texture, 0, 0, 100}, {"TEXTURE", "RESONATE", ms_texture, 1, 0, 100},
+        {"TEXTURE", "LOSSY", ms_texture, 2, 0, 100}, {"TEXTURE", "PUMP", set_pump, 3, 0, 100},
         {"BEAT", "KIT", ms_beat, 0, 0, 3}, {"BEAT", "PATTERN", set_beat_on, 1, 0, 5}, {"BEAT", "LEVEL", set_beat_on, 2, 0, 100},
         {"BEAT", "BASS", ms_beat, 3, 1, 3},
         {"KEYS", "SNAP", ms_keys, 0, 0, 2}, {"KEYS", "HARMONY", ms_keys, 1, 0, 100}, {"KEYS", "VOICE", ms_keys, 2, 1, 3},

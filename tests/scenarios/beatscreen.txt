@@ -7,11 +7,11 @@ tap SEQ
 tap SEQ
 wait 50
 expect view 4
-expect page 13
+expect page 14
 shot beat.png
 turn SELECT 1
 wait 50
-expect page 14
+expect page 15
 tapkey 16
 tapkey 2
 wait 50
@@ -31,7 +31,7 @@ expect peak_db_max -0.3
 shot drums.png
 turn SELECT 1
 wait 50
-expect page 15
+expect page 16
 tapkey 18
 tapkey 3
 wait 50
@@ -45,7 +45,7 @@ wait 3000
 shot bass.png
 turn SELECT 1
 wait 50
-expect page 13
+expect page 14
 tap SEQ
 wait 50
 expect view 0
@@ -56,7 +56,7 @@ tap SEQ
 tap SEQ
 tap SEQ
 wait 50
-expect page 13
+expect page 14
 turn K2 -1
 wait 50
 expect pattern 9

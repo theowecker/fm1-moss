@@ -219,7 +219,7 @@ static void pan_gains(float pan, float *l, float *r)   /* equal power, pan -1..1
 
 enum { C_MODE, C_MACRO, C_MIX, C_TEMPO, C_ROOT, C_MOOD, C_PLAY, C_FREEZE, C_NEW, C_NOTE, C_PANIC, C_SEED, C_SHED, C_KEYSET,
        C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION, C_CHORDS, C_CHORDNOTE,
-       C_EVOLVE };
+       C_EVOLVE, C_TEXTURE };
 typedef struct {
     uint8_t type;
     int16_t a, b;
@@ -342,7 +342,8 @@ static struct {
     int8_t applied[MS_NMACRO + MS_NMIX];       /* the points the sound has now */
     float t, apply_t;                  /* seconds to the next new target, and to the next apply */
     float busy, busy_target;
-} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, {0}, {0}, 20.0f, 0.0f, 0.0f, 0.0f};
+    int alt;                           /* a round of another progression in place of the scene's own: 1 + PATHS, 0 none */
+} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, {0}, {0}, 20.0f, 0.0f, 0.0f, 0.0f, 0};
 
 static const float RATE_MUL[4] = {0.0f, 2.0f, 1.0f, 0.5f};   /* times the scene's chord length; 0: never by itself */
 
@@ -483,7 +484,11 @@ static int chord_next(const int8_t *prog, int peek)
         return hc.mine[i];
     if (hc.path > 0)
         return PATHS[hc.path - 1][i];
-    if (prog && !peek && frand() < 0.25f * evo.chords)   /* EVOLVE: now and then a neighbour sharing two notes */
+    if (prog && !peek && i == 0)         /* EVOLVE: at the top of a round, now and then a round of another path */
+        evo.alt = frand() < 0.3f * evo.chords ? 1 + irand(4) : 0;
+    if (prog && evo.alt)
+        return PATHS[evo.alt - 1][i];
+    if (prog && !peek && frand() < 0.25f * evo.chords)   /* and now and then a neighbour sharing two notes */
         return (prog[i] + (frand() < 0.5f ? 2 : 5)) % 7;
     return prog ? prog[i] : hm.degree + MOVE[irand(8)];
 }
@@ -840,8 +845,8 @@ enum { BASS_AUTO, BASS_OFF, BASS_ROOT, BASS_WALK, BASS_MINE, BASS_N };
 #define PAT_MINE 10
 const char *const MS_KIT_NAME[KIT_N] = {"OFF", "SOFT", "LOFI", "BRUSH", "PULSE", "TICK", "WOOD"};
 const char *const MS_PATTERN_NAME[PAT_N] = {"AUTO", "BOOMBAP", "HALF", "FOUR", "BOSSA", "HEART", "SHUFFLE", "BROKEN",
-                                            "WALTZ", "SPARSE", "MINE"};
-const char *const MS_BASS_NAME[BASS_N] = {"AUTO", "OFF", "ROOT", "WALK", "MINE"};
+                                            "WALTZ", "SPARSE", "MY BEAT"};
+const char *const MS_BASS_NAME[BASS_N] = {"AUTO", "OFF", "ROOT", "WALK", "MY LINE"};
 
 /* each kit is the same four voices tuned differently: kick, snare (or rim, brush, breath, clap), hat (or shaker) and
  * an FM ping (ride, woodblock, blip) */
@@ -1275,6 +1280,22 @@ static struct {
 
 #define WOB_N 1024
 static float wob_l[WOB_N] PLAT_POOL, wob_r[WOB_N] PLAT_POOL;
+
+/* TEXTURE: on the whole mix. FILTER a slow resonant low-pass that breathes open and shut; RESONATE two combs tuned to
+ * the chord's root and 5th, so rain and wind ring in key; LOSSY a codec's damage, the highs coming and going in blocks
+ * and now and then a gap; PUMP the mix ducking on each kick, the drums and bass left alone */
+#define COMB_N 1024
+static int16_t comb_buf[2][COMB_N] PLAT_POOL;
+static struct {
+    float filt, res, lossy, pump;
+    svf_t fl, fr;
+    float fph;
+    uint32_t cw;
+    float d[2], want[2], clp[2];       /* each comb's length, gliding to want (the chord's), and its loop's low-pass */
+    float loss_a, loss_l, loss_r, drop_g, drop_t;
+    float pump_env, pump_g, pump_dec;
+    float filt_m, loss_m;              /* FILTER and LOSSY faded in and out, so turning them on or off never steps */
+} tx = {.drop_g = 1.0f, .pump_g = 1.0f, .d = {300.0f, 200.0f}, .want = {300.0f, 200.0f}};
 static uint32_t wob_w;
 
 static struct {
@@ -2033,6 +2054,7 @@ static void evolve_start(void)
     for (i = 0; i < MS_NMIX; i++)
         evo.moff[i] = evo.mtarget[i] = frand2() * 35.0f * evo.amount;
     evo.t = (20.0f + 140.0f * (1.0f - evo.pace)) * frand();
+    evo.alt = 0;
 }
 
 static void mode_start(void)
@@ -2973,8 +2995,9 @@ static void evolve_tick(float dt)
     int i;
     float rate = dt / (15.0f + 60.0f * (1.0f - evo.pace));   /* how fast the knobs ease to their targets */
     if ((evo.t -= dt) <= 0.0f) {         /* now and then one HOME knob and one MIX level get somewhere new to go */
-        evo.t = (20.0f + 140.0f * (1.0f - evo.pace)) * (0.5f + frand());
+        evo.t = (20.0f + 100.0f * (1.0f - evo.pace)) * (0.5f + frand());
         evo.target[irand(MS_NMACRO)] = frand2() * 40.0f * evo.amount;
+        evo.target[irand(MS_NMACRO)] = frand2() * 40.0f * evo.amount;   /* two at a time, so it is heard */
         evo.mtarget[irand(MS_NMIX)] = frand2() * 35.0f * evo.amount;
         evo.busy_target = frand() * 0.6f * evo.beat;
     }
@@ -3096,6 +3119,23 @@ static void drain(void)
         case C_CHORDNOTE:
             live_chord(c.a, c.b);
             break;
+        case C_TEXTURE: {
+            float v = u(clamp(c.b, 0, 100));
+            if (c.a == 0) {
+                if (tx.filt_m <= 0.0001f && v > 0.0f)
+                    tx.fl.ic1 = tx.fl.ic2 = tx.fr.ic1 = tx.fr.ic2 = 0.0f;
+                tx.filt = v;
+            } else if (c.a == 1) {
+                tx.res = v;
+            } else if (c.a == 2) {
+                if (tx.loss_m <= 0.0001f)
+                    tx.loss_a = 1.0f;
+                tx.lossy = v;
+            } else {
+                tx.pump = v;
+            }
+            break;
+        }
         case C_EVOLVE: {
             float v = u(clamp(c.b, 0, 100));
             if (c.a == 0)
@@ -3390,6 +3430,7 @@ static void fire_events(void)
             break;
         case EV_KICK:
             drum_kick(e->vel);
+            tx.pump_env = fm_maxf(tx.pump_env, e->vel);
             break;
         case EV_SNARE:
         case EV_GHOST:
@@ -3526,11 +3567,38 @@ static void nature_control(void)
         }
 }
 
+static void texture_control(float dt)
+{
+    if (tx.filt > 0.0f || tx.filt_m > 0.0f) {
+        float fc;
+        tx.fph = wrap1(tx.fph + dt * 0.07f);
+        fc = 16000.0f * fm_exp2f(-tx.filt * 6.5f * (0.5f + 0.5f * sin_t(tx.fph)));
+        svf_set(&tx.fl, fc, 0.7f + 2.2f * tx.filt);
+        tx.fr = (svf_t){tx.fr.ic1, tx.fr.ic2, tx.fl.a1, tx.fl.a2, tx.fl.a3, tx.fl.k};
+    }
+    if (tx.lossy > 0.0f || tx.loss_m > 0.0f) {   /* each block keeps a band of its own, as a codec's frames do */
+        static const float BAND[4] = {16000.0f, 7000.0f, 3500.0f, 1800.0f};
+        int b = frand() < tx.lossy ? 1 + irand(1 + (int)(tx.lossy * 2.9f)) : 0;
+        tx.loss_a = onepole_a(BAND[b]);
+        if (tx.drop_t > 0.0f)
+            tx.drop_t -= dt;
+        else if (frand() < tx.lossy * tx.lossy * 0.6f * dt)
+            tx.drop_t = 0.03f + 0.09f * frand();
+    }
+    tx.pump_dec = 1.0f / (0.55f * 60.0f / (float)st.tempo * MS_SR);   /* back up over half a beat, evenly */
+    if (tx.res > 0.0f) {                 /* the root and the 5th, in the octave below middle C */
+        int c, root = (st.root + hm.tones[0]) % 12;
+        for (c = 0; c < 2; c++)
+            tx.want[c] = MS_SR / (130.81f * fm_exp2f((float)((root + 7 * c) % 12) / 12.0f));
+    }
+}
+
 static void control(void)
 {
     const float dt = (float)CTL / MS_SR;
     int j;
     drain();
+    texture_control(dt);
     for (j = 0; j < MS_NMIX; j++)        /* ~10 ms: a MIX change, or EVOLVE's, glides */
         st.layer[j] += 0.08f * (st.layer_to[j] - st.layer[j]);
     if (st.switching) {
@@ -3631,7 +3699,7 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
         lg[2] = 0.0f;                    /* DRIFT's layer 2 is the bass, outside the voice pool */
     for (i = 0; i < n; i++) {
         float nl = frand2(), nr = frand2(), l = 0.0f, r = 0.0f, rs_l = 0.0f, rs_r = 0.0f, es = 0.0f, s, x, y;
-        float bl_l = 0.0f, bl_r = 0.0f, kbus = 0.0f, lb_l = 0.0f, lb_r = 0.0f;
+        float bl_l = 0.0f, bl_r = 0.0f, kbus = 0.0f, lb_l = 0.0f, lb_r = 0.0f, keep_l = 0.0f, keep_r = 0.0f;
         for (j = 0; j < NV; j++) {
             voice_t *v = &vo[j];
             float g, send = 1.0f;
@@ -3677,6 +3745,7 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             r += lfx.dirt > 0.0f ? soft_tanh(y * lfx.drive) * lfx.makeup : y;
         }
         s = bass_tick() * bass_gain * gf;
+        keep_l = keep_r = s;              /* PUMP leaves the bass and drums as they are */
         l += s;
         r += s;
         rs_l += 0.1f * s;
@@ -3688,6 +3757,8 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             y *= dg;
             ms.drum_l = x;
             ms.drum_r = y;
+            keep_l += x;
+            keep_r += y;
             l += x;
             r += y;
             rs_l += 0.12f * x;
@@ -3831,6 +3902,47 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             m -= ms.hp_l;
             l += ms.radio_s * (m - l);
             r += ms.radio_s * (m - r);
+        }
+        if (tx.pump > 0.0f || tx.pump_g < 0.999f) {
+            tx.pump_env = h_maxf(tx.pump_env - tx.pump_dec, 0.0f);
+            tx.pump_g += 0.01f * (1.0f - tx.pump * 0.9f * tx.pump_env - tx.pump_g);   /* ~2 ms, so the dip never clicks */
+            l = keep_l + (l - keep_l) * tx.pump_g;
+            r = keep_r + (r - keep_r) * tx.pump_g;
+        }
+        if (tx.res > 0.0f) {
+            int c;
+            float in = 0.5f * (l + r), wet = 0.0f;
+            for (c = 0; c < 2; c++) {
+                float pos, fr, y;
+                int32_t i0;
+                tx.d[c] += 0.0005f * (tx.want[c] - tx.d[c]);   /* a new chord glides the ring to it */
+                pos = (float)tx.cw - tx.d[c];
+                if (pos < 0.0f)
+                    pos += (float)COMB_N;
+                i0 = (int32_t)pos;
+                fr = pos - (float)i0;
+                y = ((float)comb_buf[c][i0 & (COMB_N - 1)] * (1.0f - fr) + (float)comb_buf[c][(i0 + 1) & (COMB_N - 1)] * fr)
+                    * (1.0f / 32767.0f);
+                tx.clp[c] += 0.45f * (y - tx.clp[c]);
+                comb_buf[c][tx.cw] = to16(h_minf(h_maxf(in * 0.5f + (0.55f + 0.4f * tx.res) * tx.clp[c], -0.98f), 0.98f));
+                wet += tx.clp[c];
+            }
+            tx.cw = (tx.cw + 1) & (COMB_N - 1);
+            l = l * (1.0f - 0.35f * tx.res) + wet * tx.res * 0.8f;
+            r = r * (1.0f - 0.35f * tx.res) + wet * tx.res * 0.8f;
+        }
+        if (tx.filt > 0.0f || tx.filt_m > 0.0001f) {
+            tx.filt_m += 0.001f * ((tx.filt > 0.0f) - tx.filt_m);
+            l += tx.filt_m * (svf_lp(&tx.fl, l) - l);
+            r += tx.filt_m * (svf_lp(&tx.fr, r) - r);
+        }
+        if (tx.lossy > 0.0f || tx.loss_m > 0.0001f) {
+            tx.loss_m += 0.001f * ((tx.lossy > 0.0f) - tx.loss_m);
+            tx.loss_l += tx.loss_a * (l - tx.loss_l);
+            tx.loss_r += tx.loss_a * (r - tx.loss_r);
+            tx.drop_g += 0.02f * ((tx.drop_t > 0.0f ? 0.05f : 1.0f) - tx.drop_g);
+            l += tx.loss_m * (tx.loss_l * tx.drop_g - l);
+            r += tx.loss_m * (tx.loss_r * tx.drop_g - r);
         }
         l = svf_lp(&ms.tone_l, l);
         r = svf_lp(&ms.tone_r, r);
@@ -4033,6 +4145,7 @@ void ms_note(int note, int vel) { post(C_NOTE, note, vel); }
 void ms_loop_keep(void) { post(C_LOOP, 2, 0); }
 void ms_chord_note(int note, int vel) { post(C_CHORDNOTE, note, vel); }
 void ms_evolve(int i, int v) { post(C_EVOLVE, i, v); }
+void ms_texture(int i, int v) { post(C_TEXTURE, i, v); }
 void ms_panic(void) { post(C_PANIC, 0, 0); }
 void ms_seed(uint32_t s) { post(C_SEED, (int)(s >> 16 & 0x7FFF), (int)(s & 0x7FFF)); }
 void ms_sleep_fade(float level) { st.sleep_target = fm_clampf(level, 0.0f, 1.0f); }

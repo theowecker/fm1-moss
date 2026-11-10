@@ -5,7 +5,7 @@ tap SEQ
 tap SEQ
 tap SEQ
 wait 50
-expect page 10
+expect page 11
 turn K1 4
 wait 3000
 expect chordroot 5

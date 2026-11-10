@@ -7,10 +7,10 @@ tap SEQ
 tap SEQ
 wait 50
 expect view 3
-expect page 10
+expect page 11
 turn SELECT 1
 wait 50
-expect page 11
+expect page 12
 expect built 4
 tapkey 7
 wait 1500
@@ -56,7 +56,7 @@ expect chordroot 2
 expect chordkind 1
 turn SELECT -1
 wait 50
-expect page 10
+expect page 11
 shot simple.png
 tap SEQ
 wait 50
@@ -71,7 +71,7 @@ tap SEQ
 tap SEQ
 turn SELECT 1
 wait 50
-expect page 11
+expect page 12
 turn K1 -8
 tapkey 7
 wait 1500

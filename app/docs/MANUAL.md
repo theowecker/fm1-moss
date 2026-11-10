@@ -10,7 +10,7 @@ picks up what you play.
 - **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
 - **SELECT** steps through the pages of the screen you are on: on the picture and the studio, the sound (HOME, MIX,
-  FX, MOTION, EVOLVE), the keys and SETUP. **K1 to K4** change the page you are on.
+  FX, MOTION, TEXTURE, EVOLVE), the keys and SETUP. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
 - **Play** and what you play loops by itself. **REC** keeps it. **GLO** undoes; hold it to start over. **ARP**
   freezes the sound.
@@ -29,10 +29,10 @@ picks up what you play.
 | SEL | The MIX page. Press again for the BEAT screen |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
 | LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
-| FX | The FX page. Press again for MOTION, and again for EVOLVE |
+| FX | The FX page. Press again for MOTION, then TEXTURE, then EVOLVE |
 | GLO | Undo: takes out the newest layer, or what the page is on: SIMPLE goes back to the scene's own chords, BUILD removes the chord, DRUMS and BASS remove the steps (asking first), LAYERS the layer, LIBRARY the loop (asking first). Hold it: the screen says KEEP HOLDING TO CLEAR, and after a second the loop is cleared. Let go before then and nothing happens |
 | K1 to K4 | The four knobs of the page you are on |
-| REC | Keep: starts a recording, keeps what you just played as a layer of the loop, and keeps the loop from fading. See [Looping](#looping) |
+| REC | Keep: starts a recording, keeps what you just played as a layer of the loop and stops the loop from fading. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
@@ -59,7 +59,8 @@ on DRIFT Garden.
 Each scene sets its own HOME and MIX knobs, tempo, mood and beat. Changing scene loads them. The KEY, the space
 and the FX, MOTION, KEYS, SHAPE and TAPE pages stay as you set them, whatever the scene.
 
-To get a scene back to how it started, hold SAVE until the screen says LET GO TO RESET SCENE, then let go. That
+To get a scene back to how it started, hold SAVE for about two seconds, until the screen says LET GO TO RESET
+SCENE, then let go. That
 resets its HOME and MIX knobs, tempo, mood and beat.
 
 To put everything back to how MOSS-1 first starts, keep holding SAVE until the screen says LET GO TO RESET
@@ -115,22 +116,33 @@ What the delay and reverb do over time. Turn DELAY up on the FX page to hear it 
 | Knob | What it does |
 | --- | --- |
 | MOD | Bends the echoes' pitch slowly, from a slight chorus to seasick |
-| RANDOM | Now and then, by chance: the delay jumps to another time for a few seconds (its pitch bends on the way), the echoes swell almost endless for a moment, or the reverb blooms. Higher means more often |
+| RANDOM | Now and then, by chance: the delay jumps to another time for a few seconds (its pitch bends on the way), the echoes swell almost endlessly for a moment or the reverb blooms. Higher means more often |
 | TONE | The echoes' colour. Left of noon darker with each repeat, right of noon thinner and brighter |
 | SPREAD | Down, the echoes stay in the middle. Up, they bounce left and right |
 
-### EVOLVE (FX a third time)
+### TEXTURE (FX a third time)
 
-The music changing by itself over minutes, so a scene left on for an hour is never quite the same. Each time you
-pick a scene, it starts a little differently too: its sound a little away from how it is set, and maybe on another chord of
-its path. It starts on, gently. AMOUNT, CHORDS and FILLS at 0 (they show OFF) and every scene plays
-just as it is set.
+Effects on the whole mix, for when the sound wants more character. All four start at 0, which is off.
+
+| Knob | What it does |
+| --- | --- |
+| FILTER | A slow, resonant low-pass that opens and closes by itself, like breathing. Higher sweeps deeper and rings more |
+| RESONATE | Two filters tuned to the chord playing, its root and 5th, so rain, wind and everything else ring in key. They glide to each new chord |
+| LOSSY | A broken stream: the highs come and go in blocks, and further up there are short gaps |
+| PUMP | The music ducks on each kick and swells back over half a beat, the lofi sidechain feel. The drums and bass stay as they are. Needs a kit |
+
+### EVOLVE (FX a fourth time)
+
+The music changes by itself over minutes, so a scene left on for an hour is never quite the same. Each time you
+pick a scene it also starts a little differently: the sound a little off from your settings, and maybe on another
+chord of its path. It is on from the start, gently: AMOUNT 30, PACE 40, CHORDS 30, FILLS 30. Set AMOUNT, CHORDS and FILLS to 0 (they show OFF) and every
+scene plays just as it is set.
 
 | Knob | What it does |
 | --- | --- |
 | AMOUNT | How far the HOME knobs and the MIX levels wander, now and then, around where you set them, gliding over ten seconds or so, and how far from them a scene starts. Your settings stay as they are; only the sound moves. A MIX level at 0 stays off |
 | PACE | How often: every few minutes at 0, every half minute or so at 100 |
-| CHORDS | The chance a scene starts on another chord of its path, and that its own progression now and then takes a neighbouring chord. Your MINE and BUILT progressions, and a held CHORD, are left alone |
+| CHORDS | The chance a scene starts on another chord of its path, that its own progression now and then takes a neighbouring chord and that now and then it plays a round of another progression (CIRCLE, DREAM, MOODY or SONG) before coming back. Your TAPPED and BUILT progressions, and a held CHORD, are left alone |
 | FILLS | How much the drums get busier and calmer over time: more ghost notes and fills, then fewer. Your own pattern on DRUMS plays as you set it |
 
 ### KEYS (ENV)
@@ -175,8 +187,8 @@ In HOLD the keys don't loop, so REC has nothing to record.
 ### The LOOPS screen
 
 LFO opens it, or press SEQ until it shows. It has the four loop pages and nothing else: turn SELECT to go through
-LAYERS, SHAPE, TAPE and LIBRARY, and the tabs at the top show where you are. Any other page button takes you back
-to the screen you came from.
+LAYERS, SHAPE, TAPE and LIBRARY, and the tabs at the top show where you are. HOME, SEL, ENV and FX open their page
+on the screen you came from.
 
 Under the tabs, the looper says what it is doing and what to do next:
 
@@ -185,7 +197,7 @@ Under the tabs, the looper says what it is doing and what to do next:
   also just stop playing, and it loops by itself.
 - **ADDING LAYER 2** (red): you are playing over the loop. Press REC to keep it. With TAP on LISTEN a pause does the
   same.
-- **FADING** or **KEPT**: the loop is playing. The line under it takes turns with tips.
+- **FADING** or **KEPT**: the loop is playing. The line under it switches between tips.
 
 The lanes are the layers, the dots are their notes and the line is the playhead. A mark on the left shows which
 layers hold notes. On LAYERS, the layer K1 has picked is highlighted, with its number on the right and OFF or EMPTY
@@ -253,8 +265,8 @@ show where you are. On each, the keys do something different:
 - **BUILD** makes a progression of any chords at all. The keys set each chord's root.
 - **PLAY** plays chords live. Each key plays a whole chord.
 
-HOME, SEL, ENV and FX take you back to the screen you came from, and LFO to the loops. SEQ comes back to the CHORDS
-page you left.
+HOME, SEL, ENV and FX open their page on the screen you came from, and LFO opens the loops. SEQ comes back to the
+CHORDS page you left.
 
 ### SIMPLE
 
@@ -265,18 +277,21 @@ screen shows the chord playing, the path and how the chords change.
 | --- | --- |
 | CHORD | AUTO lets the scene choose. Turn it to I to VII and the music moves to that chord of the key, then stays there. In C major, IV is F and VI is A minor. Playing doesn't move a chord you picked, and while it is held PATH and BUILD wait: turning PATH sets CHORD back to AUTO |
 | CHANGE | How often the chords move by themselves: STILL (they don't), SLOW, NORMAL or OFTEN |
-| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. MINE is your own, played on the keys (below). BUILT is the one you make on the BUILD screen |
+| PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. TAPPED is your own, tapped on the keys (below). BUILT is the one you make on the BUILD screen |
 | COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a whole tone above the root in place of the 3rd, airy. SUS and OPEN only change a chord where the key has that note, so they never clash |
 
-GLO puts the chords back to the scene's own: PATH to SCENE and CHORD to AUTO. Your own progression is kept for when you turn PATH to MINE again.
+GLO puts the chords back to the scene's own: PATH to SCENE and CHORD to AUTO. Your own progression is kept for when
+you turn PATH to TAPPED again.
 
 **Your own progression**: on this page the keys pick chords instead of playing notes. Tap up to four keys in a
-row: each one is the chord built on that note of the key (a note outside the key counts as the one below it), and the
-music moves to it so you hear it. PATH turns to MINE and plays them in turn, CHANGE setting how long each lasts. The
-screen names them and lights the one playing. Pause for six seconds and the next tap starts a new progression. In C major, tapping C, A, F and G plays I vi IV V. It is
-kept with your settings, so turning PATH away and back to MINE finds it again.
+row. Each one is the chord built on that note of the key (a note outside the key counts as the one below it), and
+the music moves to it so you hear it. PATH turns to TAPPED and plays them in turn, with CHANGE setting how long each
+lasts. The screen names them and lights the one playing. Pause for six seconds and the next tap starts a new
+progression. In C major, tapping C, A, F and G plays I vi IV V. It is kept with your settings, so turning PATH away
+and back to TAPPED finds it again.
 
-LOFI changes chord on the next bar, so it stays in time with the beat. SCAPES and DRIFT drift into it within a second.
+LOFI changes chord on the next bar, so it stays in time with the beat. SCAPES and DRIFT drift into it within a
+second.
 
 **Two chords, slowly**: CHANGE to SLOW, PATH to DRONE.
 
@@ -300,10 +315,10 @@ GLO takes out the ringed chord. One always stays.
 
 The roots stay what you set when you change the KEY.
 
-Chords outside the key bend everything else to fit: the melodies and the keys you play (SNAP SCALE) use the key with
-the fewest notes changed to hold the chord, and HARMONY adds the chord's own notes. So with an Ebdim7 in C major they play Eb and Gb in place of E
-and G, and nothing clashes with it. Notes you play don't pull a BUILT progression to another chord; PLAY with FOLLOW does, until the next change.
-
+Chords outside the key bend everything else to fit. The melodies and the keys you play (SNAP SCALE) use the key with
+the fewest notes changed to hold the chord, and HARMONY adds the chord's own notes. So with an Ebdim7 in C major they
+play Eb and Gb in place of E and G, and nothing clashes with it. Notes you play don't pull a BUILT progression to
+another chord. The CHORDS screen's PLAY page with FOLLOW on does, until the next change.
 
 ### PLAY
 
@@ -333,30 +348,30 @@ The beat in four knobs. The page shows the kit, pattern and bass by name, and th
 | Knob | What it does |
 | --- | --- |
 | KIT | OFF, SOFT, LOFI, BRUSH, PULSE, TICK, WOOD |
-| PATTERN | AUTO, BOOMBAP, HALF, FOUR, BOSSA, HEART, SHUFFLE, BROKEN, WALTZ, SPARSE, MINE. AUTO is the scene's own groove in LOFI and SPARSE elsewhere. MINE is the one you make on DRUMS |
-| LEVEL | How loud the drums are, and the ROOT, WALK or MINE bass |
-| BASS | AUTO (the mode's own), OFF, ROOT (on the chord root, with the kick), WALK (moves through the chord), MINE (your line on BASS) |
+| PATTERN | AUTO, BOOMBAP, HALF, FOUR, BOSSA, HEART, SHUFFLE, BROKEN, WALTZ, SPARSE, MY BEAT. AUTO is the scene's own groove in LOFI and SPARSE elsewhere. MY BEAT is the one you make on DRUMS |
+| SWING | AUTO is the pattern's own (MY BEAT keeps the swing of the pattern it was copied from). 50% is straight; up to 66% is a lazy, triplet swing. It works on every pattern |
+| LEVEL | How loud the drums are, and the ROOT, WALK or MY LINE bass |
 
-GLO on this page goes back to the scene's own kit, pattern and bass. Your own pattern and line stay for when you pick
-MINE again.
+GLO on this page goes back to the scene's own kit, pattern and bass. MY BEAT and MY LINE stay for when you pick them
+again.
 
 ### DRUMS
 
 A row of sixteen steps for each drum: KICK, SNARE, GHOST (a quiet snare), HAT, OPEN (hat) and PERC. The first 16
 keys are the steps; the six keys above them pick a drum and play it. Tap a step to turn it on or off for that drum.
 
-You always edit what you hear: the first step you tap on a preset pattern copies it into MINE, and PATTERN turns to
-MINE. So pick the pattern closest to what you want on BEAT, then change it here. If MINE already holds a pattern of
-yours, the first tap asks REPLACE YOUR PATTERN?, and a second tap does it; turn PATTERN to MINE on BEAT to go back
-to yours instead. WALTZ is a bar of 12 steps, and so is a MINE copied from it. With no kit, the first tap picks
-LOFI so you hear it.
+You always edit what you hear: the first step you tap on a preset pattern copies it into MY BEAT, and PATTERN turns
+to MY BEAT. So pick the pattern closest to what you want on BEAT, then change it here. If MY BEAT already holds a
+pattern you made, the first tap asks REPLACE MY BEAT?, and a second tap does it; turn PATTERN to MY BEAT on BEAT to
+go back to yours instead. WALTZ is a bar of 12 steps, and so is a MY BEAT copied from it. With no kit, the first tap
+picks LOFI so you hear it.
 
 | Knob | What it does |
 | --- | --- |
 | DRUM | The drum the keys set, and you hear it |
 | LEVEL | That drum's level |
 | CHANCE | How often its steps play. 100% always; lower and it skips now and then, so the beat breathes |
-| SWING | AUTO is the pattern's own (MINE keeps the swing of the pattern it was copied from). 50% is straight; up to 66% is a lazy, triplet swing. It works on every pattern |
+| SHIFT | Moves that drum's steps a sixteenth later (right) or earlier (left) round the bar, for each click |
 
 GLO removes all the steps of the drum you picked; it asks first, so press GLO again to do it.
 
@@ -364,22 +379,22 @@ GLO removes all the steps of the drum you picked; it asks first, so press GLO ag
 
 A bass line of sixteen steps that follows the chords: each step is a role in the chord playing, so the line stays
 right when the chords change, on SIMPLE, BUILD or PLAY. The first 16 keys are the steps; the six keys above them
-pick ROOT, 3RD, 5TH, 7TH, OCTAVE or LEAD-IN (a semitone under the root, leading into it) and play it. Tap a step to put
-that note there, tap it again to take it away. The first step makes BASS MINE: from ROOT or WALK it starts as a copy
-of that line, from AUTO or OFF with just the root on 1. If you already have a line of your own, it asks first, the
-same way as DRUMS.
+pick ROOT, 3RD, 5TH, 7TH, OCTAVE or LEAD-IN (a semitone under the root, leading into it) and play it. Tap a step to
+put that note there, tap it again to take it away. The first step turns BASS to MY LINE: from ROOT or WALK it starts
+as a copy of that line, from AUTO or OFF with just the root on 1. If you already made a line, it asks first, the same
+way as DRUMS.
 
 | Knob | What it does |
 | --- | --- |
-| NOTE | The note the keys place, and you hear it |
+| BASS | AUTO (the mode's own), OFF, ROOT (on the chord root, with the kick), WALK (moves through the chord), MY LINE (the one you make here) |
 | TONE | Round and soft to a growl |
 | GLIDE | How far each note slides into the next |
 | LENGTH | How long each note holds, in sixteenths |
 
 GLO removes the whole line; it asks first, so press GLO again to do it.
 
-**A lofi beat of your own**: BEAT, KIT LOFI, PATTERN BOOMBAP. DRUMS, SWING to 58%, HAT CHANCE to 80%. BASS: ROOT on
-1 and 11, 5TH on 8, LEAD-IN on 15.
+**A lofi beat of your own**: BEAT, KIT LOFI, PATTERN BOOMBAP, SWING 58%. DRUMS, HAT CHANCE to 80%. BASS: ROOT on 1
+and 11, 5TH on 8, LEAD-IN on 15.
 
 ### SETUP (SELECT back from HOME)
 
@@ -398,7 +413,7 @@ The CPU number on this page shows how hard the FM-1 is working.
 
 ## Spaces
 
-Turn ALGORITHM. Each space changes the whole sound, not just the reverb, and works with any scene.
+Turn ALGORITHM. Each space changes the whole sound, reverb and all, and works with any scene.
 
 | Space | Sound |
 | --- | --- |
@@ -433,7 +448,7 @@ With TAP on LISTEN (where it starts), you just play:
    without waiting for the pause.
 5. **Press GLO to undo** the newest layer. **Hold GLO for a second** to clear the loop and start a new one.
 
-With TAP on PLAY nothing loops by itself. Press REC to start recording, play, and press REC again to keep it as a
+With TAP on PLAY nothing loops by itself. Press REC to start recording, play, then press REC again to keep it as a
 loop. Press REC once more to record another layer over it, and again to keep that.
 
 **Every loop goes into the library by itself.** The one playing is kept up to date as you add layers, and when you
@@ -447,7 +462,7 @@ timing you played.
 
 The bar at the bottom of the picture shows the loop: red while recording, then FADING or KEPT. The eight squares
 next to it are the layers: bright when on, grey when off, dark when empty. REC's light blinks fast while recording,
-slowly while the loop fades, and stays on when it is kept.
+slowly while the loop fades and stays on when it is kept.
 
 A recording stops by itself after 60 seconds. A loop holds 128 notes; past that, new notes replace the quietest.
 The loop keeps playing when you press PLAY to stop the music, so you can play over silence. HOLD's notes are not
@@ -462,7 +477,7 @@ lightning follow the sound. FROZEN at the top means ARP's freeze is on.
 
 **Studio**: the notes. The wheel has all twelve notes in fifths. The chord is lit and joined by lines, and each note
 you hear blooms where it falls. The bars on the left are the part levels. The column on the right shows DRIFT's
-loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bottom.
+loops, the beat when a kit is on or SCAPES's weather. The knobs are at the bottom.
 
 ![](img/studio.png)
 
@@ -474,7 +489,8 @@ loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bott
 
 ## MIDI
 
-Over USB, the keys send notes on channel 1, and notes from the computer play like the keys (single notes, also on PLAY).
+Over USB, the keys send notes on channel 1, and notes from the computer play like the keys (single notes, also on
+the CHORDS screen's PLAY page).
 
 ## Recipes
 

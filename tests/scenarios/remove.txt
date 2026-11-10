@@ -6,7 +6,7 @@ tap SEQ
 tap SEQ
 turn SELECT 1
 wait 50
-expect page 11
+expect page 12
 expect built 4
 tapkey 7
 wait 3000

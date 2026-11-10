@@ -12,7 +12,7 @@ tap LFO
 tap LFO
 tap LFO
 wait 20
-expect page 9
+expect page 10
 tap GLO
 wait 50
 expect slot0 2

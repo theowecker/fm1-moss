@@ -29,7 +29,7 @@ tap LFO
 tap LFO
 tap LFO
 wait 50
-expect page 9
+expect page 10
 turn K1 1
 wait 200
 expect libcur 1
@@ -47,7 +47,7 @@ sysex F0 7D 4D 4F 01 F7
 wait 200
 expect_sysex F0 7D 4D 4F 03 F7
 expect view 2
-expect page 9
+expect page 10
 turn K1 -8
 wait 200
 turn K1 1

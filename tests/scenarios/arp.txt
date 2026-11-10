@@ -2,7 +2,7 @@
 wait 600
 tap ENV
 wait 50
-expect page 5
+expect page 6
 expect tap 1
 tap ENV
 wait 50

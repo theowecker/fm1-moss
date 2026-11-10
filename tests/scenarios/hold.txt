@@ -3,7 +3,7 @@ wait 600
 tap ENV
 turn K4 1
 wait 50
-expect page 5
+expect page 6
 expect held 0
 tapkey 7
 wait 100

@@ -68,6 +68,7 @@ void ms_chords(int i, int v);
 /* EVOLVE, 0..100: 0 amount (how far the HOME knobs wander), 1 pace, 2 chords (a chance start, now and then a
  * neighbour), 3 beat (busier and calmer) */
 void ms_evolve(int i, int v);
+void ms_texture(int i, int v);         /* TEXTURE, 0..100: 0 filter, 1 resonate, 2 lossy, 3 pump (0 off each) */
 void ms_chord_note(int note, int vel);   /* PLAY: a key's whole chord, vel 0 lets it go */
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */

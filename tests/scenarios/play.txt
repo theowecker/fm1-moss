@@ -6,7 +6,7 @@ tap SEQ
 tap SEQ
 turn SELECT 2
 wait 50
-expect page 12
+expect page 13
 expect liveroot -1
 key 7 down
 wait 1500

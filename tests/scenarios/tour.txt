@@ -46,7 +46,7 @@ expect page 1
 shot mix.png
 turn SELECT -2
 wait 100
-expect page 16
+expect page 17
 shot setup.png
 turn SELECT 1
 wait 100
