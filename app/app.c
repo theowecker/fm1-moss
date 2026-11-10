@@ -28,11 +28,7 @@ static const char *const PAGE_KNOBS[NPAGES][4] = {
 static const uint8_t PAGE_STEPS[NPAGES][4] = {
     {0}, {0}, {0, 5, 0, 0}, {0}, {MS_NKITS - 1, MS_NPATTERNS - 1, 0, MS_NBASS - 1}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {0},
 };
-/* a knob that acts (SAVE, LOAD, ERASE, DELETE) does so once turned right this many detents: an accident takes more
- * than a nudge, and the gauge shows how close it is */
-#define CONFIRM_SHORT 2
-#define CONFIRM_LONG 6
-#define CONFIRM_CLEAR 4                  /* detents past OFF that clear a layer */
+#define CONFIRM_WAIT 3000u               /* ms an armed CLEAR or DELETE waits for REC */
 #define LAYER_LVL 70                     /* a layer's level when it is new */
 static int loop_page(int p) { return p >= PG_LOOP && p <= PG_LIBRARY; }
 static void lib_load(int i);
@@ -227,7 +223,7 @@ static struct {
     uint8_t key_note[NKEYS];             /* note sent at key down, so the note-off matches after an octave change */
     uint8_t track_lvl[MS_NLAYERS];       /* the layers' levels; not saved, as the loop itself is not */
     uint8_t sel_track, sel_slot;
-    uint8_t confirm[4];                  /* detents turned so far on an acting knob */
+    uint8_t confirm[4];                  /* [3]: CLEAR or DELETE armed, waiting for REC */
     uint32_t confirm_t;
     uint32_t seq_t;
     uint8_t view_before, page_before;    /* where the LOOPS screen was opened from, to go back to */
@@ -316,7 +312,6 @@ static const char *knob_name(int i)
     return PAGE_KNOBS[set.page][i];
 }
 
-static int confirm_need(int i) { (void)i; return CONFIRM_LONG; }
 
 static int knob_value(int i)   /* 0..100 */
 {
@@ -324,9 +319,9 @@ static int knob_value(int i)   /* 0..100 */
     uint8_t *v = page_vals(set.page);
     if (set.page == PG_LOOP)
         return i == 0 ? ui.sel_track * 100 / (MS_NLAYERS - 1) : i == 1 ? ui.track_lvl[ui.sel_track]
-             : i == 2 ? (ms_vis.lp_redo == ui.sel_track ? 100 : 0) : ui.confirm[3] * 100 / CONFIRM_CLEAR;
+             : i == 2 ? (ms_vis.lp_redo == ui.sel_track ? 100 : 0) : ui.confirm[3] * 50;
     if (set.page == PG_LIBRARY)
-        return i == 0 ? ui.sel_slot * 100 / 7 : i == 3 ? ui.confirm[3] * 100 / CONFIRM_LONG : 0;
+        return i == 0 ? ui.sel_slot * 100 / 7 : i == 3 ? ui.confirm[3] * 50 : 0;
     if (set.page == PG_SHAPE && i == 2)
         return 50;
     if (set.page == PG_HOME)
@@ -361,7 +356,7 @@ static void knob_text(int i, char *t)
         } else if (i == 2) {
             text_cat(t, ms_vis.lp_redo == sel ? "ARMED" : "TURN >");
         } else {
-            text_cat(t, ui.confirm[3] ? "MORE >" : "TURN >");
+            text_cat(t, ui.confirm[3] ? "PRESS REC" : "TURN >");
         }
         return;
     }
@@ -370,7 +365,7 @@ static void knob_text(int i, char *t)
             int_text(ui.sel_slot + 1, t);
             text_cat(t, slots.s[ui.sel_slot].n ? "" : " EMPTY");
         } else if (i == 3) {
-            text_cat(t, ui.confirm[3] ? "MORE >" : "TURN >");
+            text_cat(t, ui.confirm[3] ? "PRESS REC" : "TURN >");
         }
         return;
     }
@@ -426,6 +421,39 @@ static void layer_name(int i, char *t)
     t[7] = 0;
 }
 
+/* CLEAR and DELETE: turning right only arms them, and REC does it, so no spin of a knob erases anything. Turning
+ * left, waiting or changing page lets go */
+static void arm_turn(int32_t d, const char *what, const char *armed)
+{
+    ui.confirm[3] = d > 0;
+    ui.confirm_t = d > 0 ? plat_ms() : 0;
+    app_say(what, d > 0 ? armed : "LET GO");
+}
+
+static void layer_clear(int t)
+{
+    char n[12];
+    ms_track(t, -2);
+    ui.track_lvl[t] = LAYER_LVL;
+    ms_track(t, LAYER_LVL);
+    layer_name(t, n);
+    app_say(n, "CLEARED");
+}
+
+/* REC while CLEAR or DELETE is armed: do it. 1 = it was armed */
+static int armed_rec(void)
+{
+    if (!ui.confirm[3] || (set.page != PG_LOOP && set.page != PG_LIBRARY))
+        return 0;
+    ui.confirm[3] = 0;
+    ui.confirm_t = 0;
+    if (set.page == PG_LOOP)
+        layer_clear(ui.sel_track);
+    else
+        lib_delete(ui.sel_slot);
+    return 1;
+}
+
 /* LAYERS works on one layer at a time: K1 picks it, K2 its level (down is OFF), K3 right arms REDO (the next
  * phrase you play replaces it; you hear the old one until then), K4 a full turn right clears it */
 static int layer_turn(int i, int32_t d)
@@ -460,21 +488,7 @@ static int layer_turn(int i, int32_t d)
         app_say(t, "EMPTY");
         return 1;
     }
-    if (d < 0) {
-        ui.confirm[3] = 0;
-        return 1;
-    }
-    ui.confirm_t = plat_ms();
-    ui.confirm[3] = (uint8_t)clamp(ui.confirm[3] + d, 0, CONFIRM_CLEAR);
-    if (ui.confirm[3] < CONFIRM_CLEAR) {
-        app_say(t, "KEEP TURNING TO CLEAR");
-        return 1;
-    }
-    ui.confirm[3] = 0;
-    ms_track(sel, -2);
-    ui.track_lvl[sel] = LAYER_LVL;
-    ms_track(sel, LAYER_LVL);
-    app_say(t, "CLEARED");
+    arm_turn(d, t, "PRESS REC TO CLEAR");
     return 1;
 }
 
@@ -517,12 +531,11 @@ static int pages_act(int i, int32_t d)
     }
     if (i != 3)
         return 1;
-    ui.confirm_t = plat_ms();
-    ui.confirm[3] = (uint8_t)clamp(ui.confirm[3] + d, 0, CONFIRM_LONG);
-    if (ui.confirm[3] < CONFIRM_LONG)
-        return 0;
-    ui.confirm[3] = 0;
-    lib_delete(ui.sel_slot);
+    if (!slots.s[ui.sel_slot].n) {
+        app_say("DELETE", "NOTHING THERE");
+        return 1;
+    }
+    arm_turn(d, "DELETE", "PRESS REC TO DELETE");
     return 1;
 }
 
@@ -869,7 +882,8 @@ static void input(void)
             app_say(ui.playing ? "PLAY" : "REST", "");
             break;
         case B_REC:
-            ui.arp_t = now | 1u;
+            if (!armed_rec())
+                ui.arp_t = now | 1u;
             break;
         case B_EDIT:
             ms_seed(now);
@@ -1123,7 +1137,7 @@ void app_frame(void)
     tracks_tick();
     xfer_done();
     lib_tick(now);
-    if (ui.confirm_t && now - ui.confirm_t > 1500u) {   /* a half turn left alone does not count later */
+    if (ui.confirm_t && now - ui.confirm_t > CONFIRM_WAIT) {   /* armed and left alone: let go */
         ui.confirm_t = 0;
         ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
         ui.redraw = 1;

@@ -78,12 +78,13 @@ shot ls-five.png
 turn K1 1
 wait 50
 expect layer 1
-turn K4 2
+turn K4 25 10
 wait 50
 expect tracks 63
-turn K4 2
+tap REC
 wait 100
 expect tracks 61
+expect keep 1
 tap HOME
 wait 50
 expect view 1

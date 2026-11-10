@@ -198,7 +198,7 @@ A loop holds up to eight layers. This page works on one at a time.
 | LAYER | Picks the layer, 1 to 8. Its lane is marked and its number shows on the right |
 | LEVEL | That layer's level. All the way down is OFF, which mutes it |
 | REDO | Turn right to redo that layer: it plays on until you start playing, then what you play replaces it. Its lane pulses red while it waits. Turn left to change your mind |
-| CLEAR | Keep turning right until the gauge fills: that layer is erased |
+| CLEAR | Turn right and the screen says PRESS REC TO CLEAR. Press REC within three seconds and that layer is erased. Turning left or waiting lets it go, so a knob turned by accident never erases anything |
 
 A new layer always starts at the same level, even where one was turned off before. When all eight are used, new
 notes go on layer 8.
@@ -230,7 +230,7 @@ Your last eight loops, kept for you. The LOOPS screen lists them, newest first, 
 | Knob | What it does |
 | --- | --- |
 | LOOP | Turn to a loop and it starts playing |
-| DELETE | Keep turning right until the gauge fills: that loop is taken out of the library |
+| DELETE | Turn right, then press REC within three seconds: that loop is taken out of the library |
 
 ### SETUP (GLO)
 

@@ -52,6 +52,7 @@ turn K1 -8
 wait 200
 turn K1 1
 wait 200
-turn K4 6
+turn K4 1
+tap REC
 wait 50
 expect slot1 0

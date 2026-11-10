@@ -382,7 +382,7 @@ static void loops_library(rgb_t acc)
 static void loops_view(uint32_t now)
 {
     static const char *const TIP[3][2] = {
-        {"LAYER PICKS ONE. REDO: PLAY IT AGAIN", "CLEAR: A FULL TURN RIGHT"},
+        {"LAYER PICKS ONE. REDO: PLAY IT AGAIN", "CLEAR: TURN RIGHT, THEN PRESS REC"},
         {"FADE AND MUTATE: EACH TIME ROUND", "SHIFT NUDGES IT A 16TH"},
         {"THE TAPE CHANGES ONLY THE LOOP", "NOT THE REST OF THE MUSIC"},
     };
