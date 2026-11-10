@@ -173,6 +173,7 @@ static void send_all(void)
 void app_init(void)
 {
     ms_init();
+    plat_usb_audio_full(1);              /* the computer always gets the full mix; MASTER sets the FM-1's own speaker */
     if (plat_store_size(OBJ_SETTINGS) != (int)sizeof set || plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set
         || !settings_ok())
         settings_defaults();
