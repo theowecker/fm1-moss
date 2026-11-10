@@ -508,7 +508,8 @@ static void simple_view(void)
     } else {
         centred(140, &FONT_T, "TAP UP TO 4 KEYS FOR YOUR OWN CHORDS", ST_SOFT);
     }
-    centred(152, &FONT_T, "SADDER OR BRIGHTER? TRY MOOD ON SETUP", ST_SOFT);
+    centred(152, &FONT_T, "GLO GOES BACK TO THE SCENE'S CHORDS", ST_SOFT);
+    centred(120, &FONT_T, "SADDER OR BRIGHTER? TRY MOOD ON SETUP", ST_DIM);
 }
 
 static void play_view(void)
@@ -659,7 +660,7 @@ static void drums_view(rgb_t acc)
     text_cat(t, b[1] == PAT_MINE ? "YOUR PATTERN" : MS_PATTERN_NAME[b[1]]);
     centred(56, &FONT_T, t, ST_TEXT);
     centred(140, &FONT_T, "THE FIRST 16 KEYS ARE THE STEPS", ST_SOFT);
-    centred(152, &FONT_T, "HIGHER KEYS PICK THE DRUM", ST_SOFT);
+    centred(152, &FONT_T, "HIGHER KEYS PICK A DRUM. GLO REMOVES IT", ST_SOFT);
     beat_grid(70, 11, 1, acc);
 }
 
@@ -693,7 +694,7 @@ static void bass_view(rgb_t acc)
         }
     }
     centred(140, &FONT_T, "THE FIRST 16 KEYS ARE THE STEPS", ST_SOFT);
-    centred(152, &FONT_T, "HIGHER KEYS PICK THE NOTE", ST_SOFT);
+    centred(152, &FONT_T, "HIGHER KEYS PICK A NOTE. GLO REMOVES IT", ST_SOFT);
 }
 
 static void beat_view(void)

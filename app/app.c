@@ -1153,7 +1153,7 @@ static int glo_again(uint32_t now, const char *ask)
     return 0;
 }
 
-/* GLO takes out, by page: the chord on BUILD, a drum's steps on DRUMS, the line on BASS, the chosen layer on LAYERS,
+/* GLO takes out, by page: SIMPLE's own path and held chord, the chord on BUILD, a drum's steps on DRUMS, the line on BASS, the chosen layer on LAYERS,
  * the chosen loop on LIBRARY (asked twice: it does not come back), else the newest layer or the recording */
 static void glo_tap(uint32_t now)
 {
@@ -1162,6 +1162,15 @@ static void glo_tap(uint32_t now)
     if (ms_vis.lp_state == MS_LOOP_REC) {   /* a recording first, whatever the page */
         ms_loop(1);
         app_say("RECORDING", "REMOVED");
+        return;
+    }
+    if (set.page == PG_CHORDS) {         /* SIMPLE: the scene's own chords again; MINE stays for later */
+        set.chords[0] = 0;
+        set.chords[2] = 0;
+        ms_chords(0, 0);
+        ms_chords(2, 0);
+        set_dirty = 1;
+        app_say("CHORDS", "THE SCENE'S OWN AGAIN");
         return;
     }
     if (set.page == PG_BUILD) {

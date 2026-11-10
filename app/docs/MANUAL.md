@@ -30,7 +30,7 @@ picks up what you play.
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
 | LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
 | FX | The FX page. Press again for MOTION, and again for EVOLVE |
-| GLO | Undo: takes out the newest layer, or what the page is on (see below). Hold it: the screen says KEEP HOLDING TO CLEAR, and after a second the loop is cleared. Let go before then and nothing happens |
+| GLO | Undo: takes out the newest layer, or what the page is on: SIMPLE goes back to the scene's own chords, BUILD removes the chord, DRUMS and BASS remove the steps (asking first), LAYERS the layer, LIBRARY the loop (asking first). Hold it: the screen says KEEP HOLDING TO CLEAR, and after a second the loop is cleared. Let go before then and nothing happens |
 | K1 to K4 | The four knobs of the page you are on |
 | REC | Keep: starts a recording, keeps what you just played as a layer of the loop, and keeps the loop from fading. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
@@ -127,7 +127,7 @@ just as it is set.
 
 | Knob | What it does |
 | --- | --- |
-| AMOUNT | How far the HOME knobs wander, now and then, around where you set them. Your settings stay as they are; only the sound moves |
+| AMOUNT | How far the HOME knobs and the MIX levels wander, now and then, around where you set them, gliding over a few seconds. Your settings stay as they are; only the sound moves. A MIX level at 0 stays off |
 | PACE | How often: every few minutes at 0, every half minute or so at 100 |
 | CHORDS | The chance a scene starts on another chord of its path, and that its own progression now and then takes a neighbouring chord. Your MINE and BUILT progressions, and a held CHORD, are left alone |
 | FILLS | How much the drums get busier and calmer over time: more ghost notes and fills, then fewer. Your own pattern on DRUMS plays as you set it |
@@ -265,6 +265,8 @@ screen shows the chord playing, the path and how the chords change.
 | CHANGE | How often the chords move by themselves: STILL (they don't), SLOW, NORMAL or OFTEN |
 | PATH | The order the chords go in. SCENE is the scene's own. CIRCLE is vi ii V I, DREAM I vi IV V, MOODY vi IV I V, SONG I V vi IV, DRONE just I and IV. MINE is your own, played on the keys (below). BUILT is the one you make on the BUILD screen |
 | COLOR | LUSH: 7ths and 9ths, as the scenes are made. PLAIN: simple three-note chords. SUS: a 4th in place of the 3rd, open and unresolved. OPEN: a whole tone above the root in place of the 3rd, airy. SUS and OPEN only change a chord where the key has that note, so they never clash |
+
+GLO puts the chords back to the scene's own: PATH to SCENE and CHORD to AUTO. Your own progression is kept for when you turn PATH to MINE again.
 
 **Your own progression**: on this page the keys pick chords instead of playing notes. Tap up to four keys in a
 row: each one is the chord built on that note of the key (a note outside the key counts as the one below it), and the

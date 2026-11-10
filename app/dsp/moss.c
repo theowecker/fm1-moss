@@ -252,6 +252,7 @@ static struct {
     int fx[4];                         /* delay send, time (MS_DIV_NAME index), repeats, film */
     int space;                         /* SP_* */
     float layer[6];                    /* gain per layer; [SRC_KEYS], [SRC_LOOP] are never faded */
+    float layer_to[MS_NMIX];           /* where the MIX layers glide to, so a change never steps */
 } st;
 
 enum { SNAP_FREE, SNAP_SCALE, SNAP_CHORD };
@@ -337,10 +338,11 @@ static const int8_t PATHS[5][4] = {
 static struct {
     float amount, pace, chords, beat;
     float off[MS_NMACRO], target[MS_NMACRO];   /* knob points added to the HOME knobs, and where each is heading */
-    int8_t applied[MS_NMACRO];         /* the points the sound has now */
+    float moff[MS_NMIX], mtarget[MS_NMIX];     /* the same for the MIX levels */
+    int8_t applied[MS_NMACRO + MS_NMIX];       /* the points the sound has now */
     float t, apply_t;                  /* seconds to the next new target, and to the next apply */
     float busy, busy_target;
-} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, 30.0f, 0.0f, 0.0f, 0.0f};
+} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, {0}, {0}, 20.0f, 0.0f, 0.0f, 0.0f};
 
 static const float RATE_MUL[4] = {0.0f, 2.0f, 1.0f, 0.5f};   /* times the scene's chord length; 0: never by itself */
 
@@ -1241,6 +1243,7 @@ HOT void cricket_tick(cricket_t *c, float life, float *l, float *r)
 #define ECHO_N 28672                   /* stored at half rate (darker, like tape, and half the RAM): 1.3 s */
 static int16_t echo_l[ECHO_N] PLAT_POOL, echo_r[ECHO_N] PLAT_POOL;
 static uint32_t echo_w;
+static float ms_echo_len_s, ms_wob_wf_s, ms_rev_m_s;   /* the read heads' wobble, eased per sample */
 static float echo_len, echo_len_target, echo_lp_l, echo_lp_r, echo_hp_l, echo_hp_r, echo_hold_l, echo_hold_r;
 /* MOTION: MOD wobbles the repeats, RANDOM throws in events, TONE darkens or brightens the repeats, SPREAD widens them */
 static struct {
@@ -1303,7 +1306,7 @@ static void fx_init(void)
         q += AP_LEN[i];
         rv.apw[i] = 0;
     }
-    echo_len = echo_len_target = 0.2f * MS_SR;
+    echo_len = echo_len_target = ms_echo_len_s = 0.2f * MS_SR;
 }
 
 static void fx_clear(void)
@@ -1333,6 +1336,9 @@ HOT void echo_tick(float in, float *l, float *r)
     int32_t i0;
     echo_len += 0.00005f * (echo_len_target - echo_len);   /* time changes glide, like tape */
     len = h_minf(echo_len * (1.0f + k.echo_wow * sin_t(wow_ph) + mo.mod * mo.mod * 0.025f * mo.mod_m), (float)(ECHO_N - 4));
+    /* the wobble's phases move once a control block: eased here, a stair in the read head would be a corner each step */
+    ms_echo_len_s += 0.02f * (len - ms_echo_len_s);
+    len = ms_echo_len_s;
     pos = (float)echo_w + (echo_half ? 0.5f : 0.0f) - len;
     if (pos < 0.0f)
         pos += (float)ECHO_N;
@@ -1400,7 +1406,8 @@ HOT void reverb_tick(float inl, float inr, int frozen, float *l, float *r)
 {
     float d[NLINE], x, m, h0, h1, h2, h3, in;
     int i;
-    m = rv.mod_m;
+    ms_rev_m_s += 0.02f * (rv.mod_m - ms_rev_m_s);   /* eased per sample, as the echo's */
+    m = ms_rev_m_s;
     d[0] = line_read(0, 8.0f + 7.0f * k.rev_mod * m);
     d[1] = line_read(1, 0.0f);
     d[2] = line_read(2, 8.0f - 7.0f * k.rev_mod * m);
@@ -1971,8 +1978,8 @@ static void apply(void)
     k.wind = k.rain = k.surf = k.creek = k.fire = k.thunder_rate = k.bird_rate = k.note_rate = 0.0f;
     k.rain_tone = 6500.0f;
     k.pad_bright = 0.4f;
-    for (i = 0; i < MS_NMIX; i++)
-        st.layer[i] = lvl(st.mix[i]);
+    for (i = 0; i < MS_NMIX; i++)        /* EVOLVE moves a layer that is on, never one turned off */
+        st.layer_to[i] = st.mix[i] ? lvl(clamp(st.mix[i] + (int)evo.moff[i], 5, 100)) : 0.0f;
     switch (st.mode) {
     case MODE_LOFI:
         k.dust = mac(1);
@@ -2946,24 +2953,28 @@ static void live_chord(int note, int vel)
 static void evolve_tick(float dt)
 {
     int i;
-    float rate = dt / (20.0f + 100.0f * (1.0f - evo.pace));   /* how fast the knobs ease to their targets */
-    if ((evo.t -= dt) <= 0.0f) {
-        evo.t = (30.0f + 210.0f * (1.0f - evo.pace)) * (0.5f + frand());
-        i = irand(MS_NMACRO);
-        evo.target[i] = frand2() * 25.0f * evo.amount;
+    float rate = dt / (15.0f + 60.0f * (1.0f - evo.pace));   /* how fast the knobs ease to their targets */
+    if ((evo.t -= dt) <= 0.0f) {         /* now and then one HOME knob and one MIX level get somewhere new to go */
+        evo.t = (20.0f + 140.0f * (1.0f - evo.pace)) * (0.5f + frand());
+        evo.target[irand(MS_NMACRO)] = frand2() * 40.0f * evo.amount;
+        evo.mtarget[irand(MS_NMIX)] = frand2() * 35.0f * evo.amount;
         evo.busy_target = frand() * 0.6f * evo.beat;
     }
     for (i = 0; i < MS_NMACRO; i++)
         evo.off[i] += (evo.target[i] * (evo.amount > 0.0f) - evo.off[i]) * fm_minf(rate * 4.0f, 1.0f);
+    for (i = 0; i < MS_NMIX; i++)
+        evo.moff[i] += (evo.mtarget[i] * (evo.amount > 0.0f) - evo.moff[i]) * fm_minf(rate * 4.0f, 1.0f);
     evo.busy += (evo.busy_target * (evo.beat > 0.0f) - evo.busy) * fm_minf(rate * 4.0f, 1.0f);
     if ((evo.apply_t -= dt) <= 0.0f) {   /* the knobs' sound follows once a second, if they moved: apply() is not free */
         int moved = 0;
         evo.apply_t = 1.0f;
-        for (i = 0; i < MS_NMACRO; i++)
-            if ((int)evo.off[i] != evo.applied[i]) {
-                evo.applied[i] = (int8_t)(int)evo.off[i];
+        for (i = 0; i < MS_NMACRO + MS_NMIX; i++) {
+            int now = (int)(i < MS_NMACRO ? evo.off[i] : evo.moff[i - MS_NMACRO]);
+            if (now != evo.applied[i]) {
+                evo.applied[i] = (int8_t)now;
                 moved = 1;
             }
+        }
         if (moved)
             apply();
     }
@@ -3495,7 +3506,10 @@ static void nature_control(void)
 static void control(void)
 {
     const float dt = (float)CTL / MS_SR;
+    int j;
     drain();
+    for (j = 0; j < MS_NMIX; j++)        /* ~10 ms: a MIX change, or EVOLVE's, glides */
+        st.layer[j] += 0.08f * (st.layer_to[j] - st.layer[j]);
     if (st.switching) {
         st.gen_fade -= dt / 0.6f;
         if (st.gen_fade <= 0.0f) {
@@ -3805,7 +3819,8 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             ms.wob_s += 0.0005f * (wob_target - ms.wob_s);
             wob_depth = ms.wob_s;
             wob_drift += 0.0002f * (wob_drift_to - wob_drift);
-            d = 220.0f + wob_depth * (ms.wob_wf + 60.0f * wob_drift);
+            ms_wob_wf_s += 0.02f * (ms.wob_wf - ms_wob_wf_s);   /* wow and flutter move a block at a time: eased */
+            d = 220.0f + wob_depth * (ms_wob_wf_s + 60.0f * wob_drift);
             l = wob_read(wob_l, d);
             r = wob_read(wob_r, d + 3.0f);
             ms.ch_s += 0.0005f * (k.chorus - ms.ch_s);
@@ -3875,6 +3890,9 @@ void ms_render(int32_t *lr, uint32_t n, uint32_t gain_q12)
         }
         {
             float noise = fm_maxf(st.mode == MODE_LOFI ? k.dust : 0.0f, 0.6f * k.film) * st.gen_fade;
+#ifdef MS_TEST_NO_CRACKLE                    /* the pops test hears every other corner */
+            noise = 0.0f;
+#endif
             if (noise > 0.0f && frand() < (1.0f + 14.0f * noise) * (float)m / MS_SR) {
             ms.crackle = (0.02f + 0.12f * frand() * frand()) * noise;
             ms.crackle_dec = decay_mul(0.0004f + 0.0012f * frand());

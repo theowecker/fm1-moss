@@ -38,9 +38,6 @@ int main(int argc, char **argv)
     const ms_scene_t *sc = ms_scene(MODE_DRIFT, 4);
     int i, v;
     ms_init();
-    ms_evolve(0, 0);                     /* EVOLVE off: the same notes every run */
-    ms_evolve(2, 0);
-    ms_evolve(3, 0);
     ms_mode(MODE_DRIFT, 4);
     for (i = 0; i < 4; i++) {
         ms_macro(i, sc->macro[i]);
@@ -60,8 +57,8 @@ int main(int argc, char **argv)
         ms_space(i);
         run(120, 1);
     }
-    ms_fx(3, 100);                       /* FILM: its saturation must ease in (its crackle is meant to pop, and is off */
-    run(6, 1);                           /* for these few blocks: the first comes after ~50 ms on average) */
+    ms_fx(3, 100);                       /* FILM: its saturation must ease in (its crackle is meant to pop: built */
+    run(6, 1);                           /* with MS_TEST_NO_CRACKLE it never does here) */
     ms_fx(3, 0);
     run(200, 1);
     ms_beat(0, 2);
