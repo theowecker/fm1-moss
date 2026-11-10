@@ -1,5 +1,5 @@
 # BUILD: a run of keys from chord 1 that stops short ends the progression there; an edit between taps keeps the run
-# going; an armed REMOVE that lapses says so, and a REC just after does nothing
+# going; GLO takes the ringed chord out at once
 wait 600
 tap SEQ
 tap SEQ
@@ -18,10 +18,7 @@ tapkey 12
 wait 7000
 expect built 3
 expect loop 0
-turn K4 -1
-turn K4 -1
-wait 6500
-tap REC
-wait 1200
-expect built 3
+tap GLO
+wait 100
+expect built 2
 expect loop 0

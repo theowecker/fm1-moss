@@ -1,7 +1,8 @@
 # the CHORDS page's keys play a progression into PATH MINE: each tap's chord is heard soon; a pause starts anew
 wait 600
-tap GLO
-tap GLO
+tap SEQ
+tap SEQ
+tap SEQ
 wait 50
 expect page 10
 tapkey 7

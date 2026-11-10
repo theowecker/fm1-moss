@@ -38,6 +38,9 @@ int main(int argc, char **argv)
     const ms_scene_t *sc = ms_scene(MODE_DRIFT, 4);
     int i, v;
     ms_init();
+    ms_evolve(0, 0);                     /* EVOLVE off: the same notes every run */
+    ms_evolve(2, 0);
+    ms_evolve(3, 0);
     ms_mode(MODE_DRIFT, 4);
     for (i = 0; i < 4; i++) {
         ms_macro(i, sc->macro[i]);

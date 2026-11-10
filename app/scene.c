@@ -462,17 +462,19 @@ static void scene_notes(void)
 static void loop_bar(uint32_t now)
 {
     static const char *const NAME[4] = {"", "REC", "FADING", "ADD"};
-    static const char *const HINT[4] = {"", "TAP REC TO LOOP", "", "TAP REC WHEN DONE"};
     uint32_t st = ms_vis.lp_state & 3u;
+    const char *hint = st == MS_LOOP_REC ? (set.keys[3] == 1 ? "PAUSE TO LOOP. REC KEEPS IT" : "REC AGAIN TO KEEP IT")
+                     : st == MS_LOOP_DUB ? "REC AGAIN TO KEEP IT" : "";
     uint16_t red = RGB(240, 96, 96), cream = RGB(236, 228, 206), c = st == MS_LOOP_PLAY ? cream : red;
     int32_t x0 = 54, w = 132, pos, t;
-    if (HINT[st][0]) {                        /* while it waits on you, it says what to do next */
-        int32_t w = text_w(&FONT_T, HINT[st]) + 16;
+    if (hint[0]) {                            /* while it waits on you, it says what to do next */
+        int32_t w = text_w(&FONT_T, hint) + 16;
         pill(120 - w / 2, 198, w, 16, RGB(14, 14, 22));
-        cv_text(128 - w / 2, 200, &FONT_T, HINT[st], red);
+        cv_text(128 - w / 2, 200, &FONT_T, hint, red);
     }
     pill(10, 216, 220, 18, RGB(14, 14, 22));
-    cv_text(16, 219, &FONT_T, st == MS_LOOP_PLAY && ms_vis.lp_keep ? "KEPT" : NAME[st], c);
+    cv_text(16, 219, &FONT_T, ms_vis.lp_adding ? "ADD" : st == MS_LOOP_PLAY && ms_vis.lp_keep ? "KEPT" : NAME[st],
+            ms_vis.lp_adding ? red : c);
     fill(x0, 223, w, 4, RGB(50, 50, 62));
     for (t = 0; t < MS_NLAYERS; t++) {        /* the layers: lit, dim when muted, dark when empty */
         int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
@@ -505,13 +507,16 @@ static void scene_overlay(uint32_t now)
         t[0] = 0;
         text_cat(t, ui.msg[0]);
         if (ui.msg[1][0]) {
-            text_cat(t, "  ");
+            text_cat(t, ": ");
             text_cat(t, ui.msg[1]);
         }
-        w = text_w(&FONT_B, t) + 20;
-        y = ms_vis.lp_state == MS_LOOP_EMPTY ? 214 : ms_vis.lp_state == MS_LOOP_PLAY ? 192 : 174;
-        pill(120 - w / 2, y, w, 20, RGB(14, 14, 22));
-        cv_text(130 - w / 2, y + 2, &FONT_B, t, RGB(236, 228, 206));
+        {
+            const felucca_font_t *f = text_w(&FONT_B, t) > 210 ? &FONT_T : &FONT_B;   /* long ones, smaller */
+            w = text_w(f, t) + 20;
+            y = ms_vis.lp_state == MS_LOOP_EMPTY ? 214 : ms_vis.lp_state == MS_LOOP_PLAY ? 192 : 174;
+            pill(120 - w / 2, y, w, 20, RGB(14, 14, 22));
+            cv_text(130 - w / 2, y + (f == &FONT_B ? 2 : 4), f, t, RGB(236, 228, 206));
+        }
     }
     if (ms_vis.lp_state != MS_LOOP_EMPTY)
         loop_bar(now);

@@ -9,9 +9,9 @@ expect loop 2
 wait 3500
 expect slot0 2
 expect libcur 0
-press REC
+press GLO
 wait 1100
-release REC
+release GLO
 wait 50
 expect loop 0
 tapkey 9
@@ -52,7 +52,8 @@ turn K1 -8
 wait 200
 turn K1 1
 wait 200
-turn K4 1
-tap REC
+tap GLO
+wait 50
+tap GLO
 wait 50
 expect slot1 0

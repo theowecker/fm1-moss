@@ -1,10 +1,10 @@
 # SAVE held six seconds and let go: every setting as it first starts, the loop library kept
 wait 600
-tap GLO
+turn SELECT -1
 turn K1 20
 turn PRESET -3
 wait 300
-expect page 13
+expect page 16
 press SAVE
 wait 6500
 release SAVE

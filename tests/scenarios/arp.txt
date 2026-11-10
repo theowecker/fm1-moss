@@ -16,7 +16,8 @@ expect held 0
 tap ENV
 wait 50
 expect tap 0
-# REC: tap records, tap loops, tap keeps it, tap lets it fade, a one second hold clears
+# REC keeps: a tap records, the next keeps it as a loop, the next adds a layer by hand, the next keeps that; GLO held
+# a second clears
 tap REC
 wait 50
 expect loop 1
@@ -25,16 +26,17 @@ wait 300
 tap REC
 wait 50
 expect loop 2
-tap REC
-wait 50
 expect keep 1
 tap REC
 wait 50
-expect keep 0
+expect loop 3
+tap REC
+wait 50
 expect loop 2
+expect keep 1
 shot looping.png
-press REC
+press GLO
 wait 1100
-release REC
+release GLO
 wait 50
 expect loop 0

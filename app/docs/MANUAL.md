@@ -10,11 +10,12 @@ picks up what you play.
 - **PRESETS** picks the scene. There are 16, across three modes.
 - **ALGORITHM** picks the space: the character of the reverb and delay.
 - **SELECT** steps through the pages of the screen you are on: on the picture and the studio, the sound (HOME, MIX,
-  FX, MOTION), the beat, the keys and SETUP. **K1 to K4** change the page you are on.
+  FX, MOTION, EVOLVE), the keys and SETUP. **K1 to K4** change the page you are on.
 - **The keys** play along, in key.
-- **Play** and what you play loops by itself. **REC** keeps a loop or clears it. **ARP** freezes the sound.
-- **SEQ** steps through the four screens: the picture, the studio, the loops and the chords. The loops and the
-  chords have their own pages, which SELECT steps through there.
+- **Play** and what you play loops by itself. **REC** keeps it. **GLO** undoes; hold it to start over. **ARP**
+  freezes the sound.
+- **SEQ** steps through the five screens: the picture, the studio, the loops, the chords and the beat. The loops, the
+  chords and the beat each have their own pages, which SELECT steps through there.
 - **SAVE** saves your settings and your loops.
 
 ## The panel
@@ -25,17 +26,17 @@ picks up what you play.
 | ALGORITHM | Next or previous space |
 | SELECT | Next or previous page of the screen you are on |
 | HOME | The HOME page |
-| SEL | The MIX page. Press again for BEAT |
+| SEL | The MIX page. Press again for the BEAT screen |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
 | LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
-| FX | The FX page. Press again for MOTION |
-| GLO | The SETUP page. Press again for the CHORDS screen |
+| FX | The FX page. Press again for MOTION, and again for EVOLVE |
+| GLO | Undo: takes out the newest layer, or what the page is on (see below). Hold it: the screen says KEEP HOLDING TO CLEAR, and after a second the loop is cleared. Let go before then and nothing happens |
 | K1 to K4 | The four knobs of the page you are on |
-| REC | The looper: tap to keep the loop from fading (tap again to let it fade). Hold for a second to clear it. See [Looping](#looping) |
+| REC | Keep: starts a recording, keeps what you just played as a layer of the loop, and keeps the loop from fading. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
-| SEQ | The next screen: PICTURE, STUDIO, LOOPS, CHORDS |
+| SEQ | The next screen: PICTURE, STUDIO, LOOPS, CHORDS, BEAT |
 | SAVE | Save your settings and your loop library. Hold for two seconds and let go to reset the scene. Hold for six to reset everything (your saved loops stay) |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
@@ -118,17 +119,18 @@ What the delay and reverb do over time. Turn DELAY up on the FX page to hear it 
 | TONE | The echoes' colour. Left of noon darker with each repeat, right of noon thinner and brighter |
 | SPREAD | Down, the echoes stay in the middle. Up, they bounce left and right |
 
-### BEAT (SEL twice)
+### EVOLVE (FX a third time)
 
-Drums and a backing bass, in any mode. The LOFI scenes and DRIFT's Garden start with a kit. The others start
-with none.
+The music changing by itself over minutes, so a scene left on for an hour is never quite the same, and a scene you
+pick can start on a different chord of its path. It starts on, gently. AMOUNT, CHORDS and FILLS at 0 (they show OFF) and every scene plays
+just as it is set.
 
 | Knob | What it does |
 | --- | --- |
-| KIT | OFF, SOFT, LOFI, BRUSH, PULSE, TICK, WOOD |
-| PATTERN | AUTO, BOOMBAP, HALF, FOUR, BOSSA, HEART, SHUFFLE, BROKEN, WALTZ, SPARSE. AUTO is the scene's own groove in LOFI and SPARSE elsewhere |
-| LEVEL | How loud the drums are, and the ROOT or WALK bass |
-| BASS | AUTO (the mode's own), OFF, ROOT (on the chord root, with the kick), WALK (moves through the chord) |
+| AMOUNT | How far the HOME knobs wander, now and then, around where you set them. Your settings stay as they are; only the sound moves |
+| PACE | How often: every few minutes at 0, every half minute or so at 100 |
+| CHORDS | The chance a scene starts on another chord of its path, and that its own progression now and then takes a neighbouring chord. Your MINE and BUILT progressions, and a held CHORD, are left alone |
+| FILLS | How much the drums get busier and calmer over time: more ghost notes and fills, then fewer. Your own pattern on DRUMS plays as you set it |
 
 ### KEYS (ENV)
 
@@ -178,17 +180,20 @@ to the screen you came from.
 Under the tabs, the looper says what it is doing and what to do next:
 
 - **LISTENING** (the dot pulses): TAP is on LISTEN and it is waiting for you. Play and a loop starts by itself.
-- **RECORDING LAYER 1** (red): it is taking down what you play. Stop playing and it loops.
-- **ADDING LAYER 2** (red): you are playing over the loop. Pause and the phrase joins as its own layer.
-- **FADING** or **KEPT**: the loop is playing. The line under it takes turns with tips: tap REC to keep it, tap
-  again to let it fade, hold REC for a new loop.
+- **RECORDING LAYER 1** (red): it is taking down what you play. Press REC to keep it now, or stop playing and it
+  loops by itself.
+- **ADDING LAYER 2** (red): you are playing over the loop. Press REC to keep it now, or pause and it joins by itself.
+- **FADING** or **KEPT**: the loop is playing. The line under it takes turns with tips.
 
 The lanes are the layers, the dots are their notes and the line is the playhead. A mark on the left shows which
-layers hold notes. On LAYERS, the layer K1 has picked is highlighted, with its number on the right and OFF, EMPTY or
-REDO when that applies. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
+layers hold notes. On LAYERS, the layer K1 has picked is highlighted, with its number on the right and OFF or EMPTY
+when that applies. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
 
-**One loop, then another**: play a phrase, let it loop, keep it if you like. When you want something new, hold REC.
+**One loop, then another**: play a phrase, let it loop, keep it if you like. When you want something new, hold GLO.
 The old loop stays in the library and the next thing you play starts a new one.
+
+**Redo one layer**: on LAYERS, pick it with LAYER and press GLO. It's gone, and the next thing you play is a new
+layer (with TAP on PLAY: REC, play, REC).
 
 ### LAYERS (LFO)
 
@@ -200,11 +205,11 @@ A loop holds up to eight layers. This page works on one at a time.
 | --- | --- |
 | LAYER | Picks the layer, 1 to 8. Its lane is marked and its number shows on the right |
 | LEVEL | That layer's level. All the way down is OFF, which mutes it |
-| REDO | Turn right to redo that layer: it plays on until your next phrase, which replaces it. With TAP on LISTEN that is when you start playing; on PLAY, when you tap REC to record over the loop. Its lane pulses red while it waits. Turn left to change your mind |
-| CLEAR | Turn right and the screen says PRESS REC TO CLEAR. Press REC within six seconds and that layer is erased. Turning left or waiting lets it go (the screen says CANCELLED, and a REC pressed just after does nothing), so a knob turned by accident never erases anything |
+| MUTE | Right mutes that layer, left brings it back. It stays in the loop |
+| SHIFT | Moves that layer a sixteenth later (right) or earlier (left) for each click |
 
-A new layer always starts at the same level, whatever the layer before it in that place was set to. REDO keeps the level you set. When all eight are used, new
-notes go on layer 8.
+On this page GLO takes out the layer you picked. A new layer always starts at the same level, whatever the layer
+before it in that place was set to. When all eight are used, new notes go on layer 8.
 
 ### SHAPE (LFO again)
 
@@ -233,18 +238,21 @@ Your last eight loops, kept for you. The LOOPS screen lists them, newest first, 
 | Knob | What it does |
 | --- | --- |
 | LOOP | Turn to a loop and it starts playing |
-| DELETE | Turn right, then press REC within six seconds: that loop is taken out of the library |
+
+To delete the loop you picked, press GLO: the screen asks DELETE LOOP 2?. Press GLO again within six seconds and it
+is taken out of the library. Waiting or picking another loop lets it go.
 
 ### The CHORDS screen
 
-Press SEQ until it shows, or GLO twice. It has three pages: turn SELECT to go between them, and the tabs at the top
+Press SEQ until it shows. It has three pages: turn SELECT to go between them, and the tabs at the top
 show where you are. On each, the keys do something different:
 
 - **SIMPLE** shapes the chords of the key. The keys pick up to four of them for your own progression.
 - **BUILD** makes a progression of any chords at all. The keys set each chord's root.
 - **PLAY** plays chords live. Each key plays a whole chord.
 
-HOME, SEL, ENV and FX take you back to the screen you came from, and LFO to the loops. GLO from SETUP, or SEQ, comes back to the CHORDS page you left.
+HOME, SEL, ENV and FX take you back to the screen you came from, and LFO to the loops. SEQ comes back to the CHORDS
+page you left.
 
 ### SIMPLE
 
@@ -282,7 +290,9 @@ The first change you make turns PATH to BUILT, so you hear it.
 | CHORD | Picks a chord. One past the last is a new one (+) |
 | ROOT | The chosen chord's root, any of the twelve notes |
 | TYPE | maj, m, 7, maj7, m7, 6, m6, 9, m9, maj9, add9, sus2, sus4, 7sus4, dim, dim7, m7b5, 7b5, aug |
-| LENGTH | How long it lasts, against the scene's own chord length: 1/2x, 1x, 2x or 4x. CHANGE still scales them all. Turn it fully left, past 1/2x, and it shows REMOVE? and the screen asks REMOVE Cm7?; press REC within six seconds and the chord is taken out. One always stays |
+| LENGTH | How long it lasts, against the scene's own chord length: 1/2x, 1x, 2x or 4x. CHANGE still scales them all |
+
+GLO takes out the ringed chord. One always stays.
 
 The roots stay what you set when you change the KEY.
 
@@ -307,7 +317,61 @@ chords. The chord you last played shows big in the middle. In LISTEN the chords 
 **Play a progression by hand**: PLAY, TYPE on KEY, VOICING on SMOOTH, STRUM about 20. Play C, A, F and G one after
 the other and hold each for a while: the music follows you.
 
-### SETUP (GLO)
+### The BEAT screen
+
+Press SEQ until it shows, or SEL twice. Drums and a backing bass, in any mode. The LOFI scenes and DRIFT's Garden
+start with a kit; the others start with none. Three pages, as on the CHORDS screen: turn SELECT to go between them.
+
+### BEAT
+
+The beat in four knobs. The page shows the kit, pattern and bass by name, and the pattern's steps.
+
+| Knob | What it does |
+| --- | --- |
+| KIT | OFF, SOFT, LOFI, BRUSH, PULSE, TICK, WOOD |
+| PATTERN | AUTO, BOOMBAP, HALF, FOUR, BOSSA, HEART, SHUFFLE, BROKEN, WALTZ, SPARSE, MINE. AUTO is the scene's own groove in LOFI and SPARSE elsewhere. MINE is the one you make on DRUMS |
+| LEVEL | How loud the drums are, and the ROOT, WALK or MINE bass |
+| BASS | AUTO (the mode's own), OFF, ROOT (on the chord root, with the kick), WALK (moves through the chord), MINE (your line on BASS) |
+
+### DRUMS
+
+A row of sixteen steps for each drum: KICK, SNARE, GHOST (a quiet snare), HAT, OPEN (hat) and PERC. The first 16
+keys are the steps; the six keys above them pick a drum and play it. Tap a step to turn it on or off for that drum.
+
+You always edit what you hear: the first step you tap on a preset pattern copies it into MINE, and PATTERN turns to
+MINE. So pick the pattern closest to what you want on BEAT, then change it here. With no kit, the first tap picks
+LOFI so you hear it.
+
+| Knob | What it does |
+| --- | --- |
+| DRUM | The drum the keys set, and you hear it |
+| LEVEL | That drum's level |
+| CHANCE | How often its steps play. 100% always; lower and it skips now and then, so the beat breathes |
+| SWING | AUTO is the pattern's own. 50% is straight; up to 66% is a lazy, triplet swing. It works on every pattern |
+
+GLO removes all the steps of the drum you picked; it asks first, so press GLO again to do it.
+
+### BASS
+
+A bass line of sixteen steps that follows the chords: each step is a role in the chord playing, so the line stays
+right when the chords change, on SIMPLE, BUILD or PLAY. The first 16 keys are the steps; the six keys above them
+pick ROOT, 3RD, 5TH, 7TH, OCTAVE or LEAD-IN (a semitone under the root, leading into it) and play it. Tap a step to put
+that note there, tap it again to take it away. The first step makes BASS MINE: from ROOT or WALK it starts as a copy
+of that line, from AUTO or OFF with just the root on 1.
+
+| Knob | What it does |
+| --- | --- |
+| NOTE | The note the keys place, and you hear it |
+| TONE | Round and soft to a growl |
+| GLIDE | How far each note slides into the next |
+| LENGTH | How long each note holds, in sixteenths |
+
+GLO removes the whole line; it asks first, so press GLO again to do it.
+
+**A lofi beat of your own**: BEAT, KIT LOFI, PATTERN BOOMBAP. DRUMS, SWING to 58%, HAT CHANCE to 80%. BASS: ROOT on
+1 and 11, 5TH on 8, LEAD-IN on 15.
+
+### SETUP (SELECT back from HOME)
 
 | Knob | What it does |
 | --- | --- |
@@ -355,17 +419,19 @@ With TAP on LISTEN (where it starts), you just play:
 1. Play a few notes and stop. After two seconds of quiet they loop.
 2. Play again and the new phrase goes on top as a new layer, up to eight.
 3. The loop slowly fades while you leave it, and changes a little each time round (SHAPE sets how much).
-4. **Tap REC to keep it.** It stops fading. Tap REC again to let it fade.
-5. **Hold REC for a second to clear it** and start a new one.
+4. **Press REC to keep it.** It stops fading. Press REC while you play and that phrase is kept as a layer at once,
+   without waiting for the pause.
+5. **Press GLO to undo** the newest layer. **Hold GLO for a second** to clear the loop and start a new one.
 
-With TAP on PLAY nothing loops by itself. Tap REC to start recording, play, and tap REC again to loop it.
+With TAP on PLAY nothing loops by itself. Press REC to start recording, play, and press REC again to keep it as a
+loop. Press REC once more to record another layer over it, and again to keep that.
 
 **Every loop goes into the library by itself.** The one playing is kept up to date as you add layers, and when you
 clear it and start a new one, the old one stays in the list. The library holds your last eight. To keep them after
 you turn the FM-1 off, press SAVE (SAVE stays lit while there is something to save). Writing to the flash stops the
 sound for a moment, so it only happens when you press SAVE.
 
-When there is a beat (LOFI, or a kit on the BEAT page), the loop is a whole number of bars, 1, 2, 4 or 8, and its
+When there is a beat (LOFI, or a kit on the BEAT screen), the loop is a whole number of bars, 1, 2, 4 or 8, and its
 notes sit on the beat's grid with its swing, so it stays in time with the drums. Without a beat the loop keeps the
 timing you played.
 
@@ -377,7 +443,7 @@ A recording stops by itself after 60 seconds. A loop holds 96 notes; past that, 
 The loop keeps playing when you press PLAY to stop the music, so you can play over silence. HOLD's notes are not
 looped.
 
-## The four screens
+## The five screens
 
 Press SEQ.
 
@@ -393,6 +459,8 @@ loops, the beat when a kit is on, or SCAPES's weather. The knobs are at the bott
 **Loops**: the looper on its own, with only the loop pages. See [The LOOPS screen](#the-loops-screen).
 
 **Chords**: the harmony, with SIMPLE, BUILD and PLAY. See [The CHORDS screen](#the-chords-screen).
+
+**Beat**: the drums and bass, with BEAT, DRUMS and BASS. See [The BEAT screen](#the-beat-screen).
 
 ## MIDI
 

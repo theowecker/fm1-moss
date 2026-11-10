@@ -11,7 +11,7 @@ tap SEL
 turn K1 -10
 wait 100
 expect mix0 50
-tap GLO
+turn SELECT -2
 turn K1 4
 wait 100
 expect tempo 86

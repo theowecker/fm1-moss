@@ -52,6 +52,8 @@ void ms_seed(uint32_t s);
 /* i: 0 snap (FREE, SCALE, CHORD), 1 harmony 0..100, 2 voice (AUTO, EP, BELL, PAD, KALIMBA), 3 PLAY, LISTEN, HOLD (a tap plants a note that plays by itself) */
 void ms_keys(int i, int v);
 void ms_loop(int clear);               /* 0: advance record, play, overdub, play; 1: clear */
+void ms_loop_keep(void);               /* REC: start recording, or keep what is playing and make what comes next a
+                                          new layer */
 void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
 void ms_loop_fx(int i, int v);         /* the loop's tape: 0 warble, 1 dirt, 2 age, 3 send, 0..100 */
 void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spread, 0..100 */
@@ -63,13 +65,16 @@ void ms_motion(int i, int v);          /* MOTION: 0 mod, 1 random, 2 tone, 3 spr
  * own chord on the note, else MS_CHORD_* + 1), 8 voicing (CLOSE, OPEN, WIDE, SMOOTH), 9 strum 0..100, 10 follow 0 or 1
  * (the music moves to the chord played) */
 void ms_chords(int i, int v);
+/* EVOLVE, 0..100: 0 amount (how far the HOME knobs wander), 1 pace, 2 chords (a chance start, now and then a
+ * neighbour), 3 beat (busier and calmer) */
+void ms_evolve(int i, int v);
 void ms_chord_note(int note, int vel);   /* PLAY: a key's whole chord, vel 0 lets it go */
 void ms_fx(int i, int v);              /* 0 delay send, 2 repeats, 3 film: 0..100; 1 time: MS_DIV_NAME */
 void ms_space(int sp);                 /* MS_SPACE_NAME */
 #define MS_NBUILT 8                    /* chords in a BUILT progression */
 #define MS_NLAYERS 8
 /* loop layer 0..MS_NLAYERS - 1: v 0..100 its level, -1 mute, -3 unmute, -2 clear, -4/-5 shift later/earlier,
- * -6 the next phrase replaces it (REDO), -7 not */
+ * -6 the next phrase replaces it, -7 not (unused by the UI now) */
 void ms_track(int t, int v);
 /* a loop as saved: times in ms, 64 notes at most (the loudest), vt = velocity 1..31 << 3 | layer 0..7; rsv[0] the
  * format, MS_SLOT_FORMAT (0: an older one, velocity 1..63 << 2 | layer 0..3) */
@@ -88,10 +93,19 @@ typedef struct {
 extern ms_slot_t ms_slot_xfer;
 int ms_loop_snap(void);               /* the loop playing now into ms_slot_xfer (n 0: none ready) */
 int ms_loop_load(void);               /* ms_slot_xfer becomes the loop */
-void ms_beat(int i, int v);            /* 0 kit, 1 pattern, 3 bass: by their names below; 2 level 0..100 */
+/* 0 kit, 1 pattern, 3 bass: by their names below; 2 level 0..100; 4 swing (0 the pattern's own, 1..9 straight to a
+ * triplet feel); the bass's 5 tone, 6 glide 0..100, 7 length in sixteenths 1..8; MINE: 10 + drum its steps (a bit
+ * each, as int16), 20 + drum its level | chance << 7 (0..100 each), 30 + step the bass note there (MS_BN_*), 46
+ * its length (12 or 16);
+ * 8 hear a drum now, 9 hear a bass note (MS_BN_*) on the chord now */
+void ms_beat(int i, int v);
+enum { MS_DRUM_KICK, MS_DRUM_SNARE, MS_DRUM_GHOST, MS_DRUM_HAT, MS_DRUM_OPEN, MS_DRUM_PERC, MS_NDRUMS };
+enum { MS_BN_OFF, MS_BN_ROOT, MS_BN_3RD, MS_BN_5TH, MS_BN_7TH, MS_BN_OCT, MS_BN_STEP, MS_NBN };
+/* a pattern's steps per drum, for MINE to start from (the scene's own for AUTO): its length, 12 or 16, and swing */
+int ms_pattern_rows(int mode, int scene, int pattern, uint16_t rows[MS_NDRUMS], float *swing);
 #define MS_NKITS 7
-#define MS_NPATTERNS 10
-#define MS_NBASS 4
+#define MS_NPATTERNS 11                 /* the last is MINE */
+#define MS_NBASS 5                     /* the last is MINE */
 extern const char *const MS_KIT_NAME[MS_NKITS];
 extern const char *const MS_PATTERN_NAME[MS_NPATTERNS];
 extern const char *const MS_BASS_NAME[MS_NBASS];
@@ -133,6 +147,7 @@ typedef struct {
     volatile uint32_t hold[4];         /* HOLD: the notes planted, bit per MIDI note */
     volatile uint32_t lp_dots[MS_NLAYERS];   /* each loop layer's notes in 32 time bins */
     volatile int8_t lp_redo;           /* the layer armed for REDO, -1 none */
+    volatile uint8_t lp_adding;        /* a phrase is going onto the playing loop as a new layer */
     volatile uint8_t lp_tracks, lp_mute, lp_track;   /* tracks holding notes and muted (bit each), the one recording */
     volatile uint32_t xfer_seq;
     volatile uint8_t lp_keep;          /* the loop is kept: it does not fade */

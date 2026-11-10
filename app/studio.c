@@ -67,8 +67,10 @@ static void studio_header(uint32_t now)
     if ((int32_t)(ui.msg_until - now) > 0) {
         t[0] = 0;
         text_cat(t, ui.msg[0]);
-        text_cat(t, " ");
-        text_cat(t, ui.msg[1]);
+        if (ui.msg[1][0]) {
+            text_cat(t, ": ");
+            text_cat(t, ui.msg[1]);
+        }
         cv_text(234 - text_w(&FONT_T, t), 25, &FONT_T, t, c565(acc));
     } else if (ms_vis.lp_state != MS_LOOP_EMPTY) {
         static const char *const ST_NAME[4] = {"", "REC", "FADING", "ADD"};
@@ -224,7 +226,8 @@ static void studio_knobs(void)
                 disc(232 - (n - 1 - k++) * 7, 182, 2, i == set.page ? c565(acc) : ST_DIM);
     }
     if (set.sleep && ui.sleep_start) {
-        uint32_t left = SLEEP_MIN[set.sleep] * 60000u - (plat_ms() - ui.sleep_start);
+        int32_t el = since(plat_ms(), ui.sleep_start);
+        uint32_t left = SLEEP_MIN[set.sleep] * 60000u - (uint32_t)(el > 0 ? el : 0);
         int_text((int32_t)(left / 60000u + 1u), t);
         text_cat(t, "m TO SLEEP");
         cv_text(206 - text_w(&FONT_T, t), 176, &FONT_T, t, ST_SOFT);
@@ -276,57 +279,53 @@ static void loops_status(uint32_t now, const char **state, const char **hint, ui
     st[0] = 0;
     if (lp == MS_LOOP_EMPTY) {
         *state = tap == 2 ? "HOLD: NO LOOPING" : tap == 1 ? "LISTENING" : "READY";
-        *hint = tap == 2 ? "SET TAP TO LISTEN TO LOOP" : tap == 1 ? "PLAY AND IT LOOPS BY ITSELF" : "TAP REC, PLAY, TAP REC";
+        *hint = tap == 2 ? "SET TAP TO LISTEN TO LOOP" : tap == 1 ? "PLAY AND IT LOOPS BY ITSELF" : "REC, PLAY, REC TO KEEP";
         *blink = tap == 1;
         if (tap == 2)
             *c = ST_SOFT;
         return;
     }
-    if (lp == MS_LOOP_REC || lp == MS_LOOP_DUB) {
+    if (lp == MS_LOOP_REC || lp == MS_LOOP_DUB || ms_vis.lp_adding) {
         text_cat(st, lp == MS_LOOP_REC ? "RECORDING LAYER " : "ADDING LAYER ");
         i = text_len(st);
         st[i] = (char)('1' + ms_vis.lp_track);
         st[i + 1] = 0;
         *state = st;
-        *hint = tap == 1 ? (lp == MS_LOOP_REC ? "STOP PLAYING AND IT LOOPS" : "PAUSE AND IT JOINS THE LOOP")
-                         : (lp == MS_LOOP_REC ? "TAP REC TO LOOP IT" : "TAP REC WHEN DONE");
+        *hint = lp == MS_LOOP_REC ? (tap == 1 ? "REC KEEPS IT NOW, OR JUST PAUSE" : "REC KEEPS IT. GLO REMOVES IT")
+              : tap == 1 ? "REC KEEPS IT NOW, OR JUST PAUSE" : "REC KEEPS IT";
         *c = RGB(240, 96, 96);
         *blink = 2;
         return;
     }
     *state = ms_vis.lp_keep ? "KEPT" : "FADING";
-    if (tap == 1) {                       /* listening over a loop: the next phrase is a new layer */
-        text_cat(st, ms_vis.lp_keep ? "KEPT. LISTENING" : "FADING. LISTENING");
-        *state = st;
-        *blink = 1;
-    }
+    *blink = tap == 1;                    /* listening over a loop: the next phrase is a new layer */
     switch (now / 3000u % 3u) {           /* the tips take turns */
     case 0:
-        *hint = ms_vis.lp_redo >= 0 ? "PLAY TO REDO THE RED LAYER"
-              : free_layer < 0 ? "LAYERS FULL. CLEAR ONE ON LAYERS"
-              : tap == 1 ? "PLAY TO ADD A LAYER" : "TAP REC TO KEEP OR LET FADE";
+        *hint = free_layer < 0 ? "ALL 8 LAYERS USED. GLO REMOVES ONE"
+              : tap == 1 ? "PLAY TO ADD A LAYER" : "PRESS REC TO ADD A LAYER";
         break;
     case 1:
-        *hint = ms_vis.lp_keep ? "TAP REC TO LET IT FADE" : "TAP REC TO KEEP IT";
+        *hint = ms_vis.lp_keep ? "GLO UNDOES THE LAST LAYER" : "PRESS REC TO STOP IT FADING";
         break;
     default:
-        *hint = "HOLD REC FOR A NEW LOOP";
+        *hint = "HOLD GLO TO START AGAIN";
         break;
     }
 }
 
-/* a lane per layer, thin so eight fit: the chosen one (LAYERS' K1) is marked, one armed for REDO pulses red */
+/* a lane per layer, thin so eight fit: the chosen one (LAYERS' K1) is marked, the one recording red */
 static void loops_lane(int32_t t, int32_t y, uint32_t now, rgb_t acc)
 {
     static const rgb_t WORN = CI(150, 120, 90);
     int32_t x0 = 22, w = 160, b, x;
     int used = ms_vis.lp_tracks >> t & 1u, muted = (ms_vis.lp_mute >> t & 1u) || !ui.track_lvl[t];
-    int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC) && ms_vis.lp_track == t;
-    int redo = ms_vis.lp_redo == t, sel = set.page == PG_LOOP && ui.sel_track == t;
+    int rec = (ms_vis.lp_state == MS_LOOP_DUB || ms_vis.lp_state == MS_LOOP_REC || ms_vis.lp_adding)
+              && ms_vis.lp_track == t;
+    int sel = set.page == PG_LOOP && ui.sel_track == t;
     int32_t amp = set.tape[0] * 2 / 100;  /* WARBLE bends the lane, AGE browns the notes */
     rgb_t dot = mix(acc, WORN, (int32_t)set.tape[2] * 200 / 100);
     uint16_t red = RGB(240, 96, 96);
-    uint16_t c = rec || (redo && (now / 300u & 1u)) ? red : !used ? ST_DIM : muted ? c565(mix(C(16, 18, 28), dot, 80)) : c565(dot);
+    uint16_t c = rec ? red : !used ? ST_DIM : muted ? c565(mix(C(16, 18, 28), dot, 80)) : c565(dot);
     if (sel)
         fill(x0 - 4, y - 2, w + 8, 5, ST_LINE);
     for (x = 0; x < w; x += 2) {
@@ -336,9 +335,7 @@ static void loops_lane(int32_t t, int32_t y, uint32_t now, rgb_t acc)
     for (b = 0; b < 32; b++)
         if (ms_vis.lp_dots[t] >> b & 1u)
             disc(x0 + 2 + b * (w - 4) / 31, y, 1, c);
-    if (redo)
-        fill(4, y - 1, 10, 3, red);
-    else if (used)
+    if (used)
         fill(6, y - 1, 6, 3, c);
 }
 
@@ -348,13 +345,11 @@ static void loops_lane_label(uint32_t now, int32_t y0)
     char n[12];
     n[0] = (char)('1' + t);
     n[1] = 0;
-    if (ms_vis.lp_redo == t)
-        text_cat(n, " REDO");
-    else if (!(ms_vis.lp_tracks >> t & 1u))
+    if (!(ms_vis.lp_tracks >> t & 1u))
         text_cat(n, " EMPTY");
     else if (!ui.track_lvl[t] || ms_vis.lp_mute >> t & 1u)
         text_cat(n, " OFF");
-    cv_text(234 - text_w(&FONT_T, n), y0 + t * 6 - 6, &FONT_T, n, ms_vis.lp_redo == t ? RGB(240, 96, 96) : ST_TEXT);
+    cv_text(234 - text_w(&FONT_T, n), y0 + t * 6 - 6, &FONT_T, n, ST_TEXT);
     (void)now;
 }
 
@@ -387,8 +382,8 @@ static void loops_library(rgb_t acc)
 static void loops_view(uint32_t now)
 {
     static const char *const TIP[3][2] = {
-        {"LAYER PICKS ONE. REDO: PLAY IT AGAIN", "CLEAR: TURN RIGHT, THEN PRESS REC"},
-        {"FADE AND MUTATE: EACH TIME ROUND", "SHIFT NUDGES IT A 16TH"},
+        {"PICK A LAYER. GLO REMOVES IT", "LEVEL ALL THE WAY DOWN IS OFF"},
+        {"FADE AND MUTATE WORK EACH TIME ROUND", "SHIFT NUDGES IT A 16TH"},
         {"THE TAPE CHANGES ONLY THE LOOP", "NOT THE REST OF THE MUSIC"},
     };
     rgb_t acc = MODE_ACCENT[set.mode];
@@ -425,28 +420,41 @@ static void loops_view(uint32_t now)
         fill(px, 74, 1, 50, ST_TEXT);
     if (set.page == PG_LOOP)
         loops_lane_label(now, 78);
-    centred(130, &FONT_T, hint, ST_TEXT);
     if (set.page == PG_LIBRARY) {
+        if (ui.confirm[3]) {
+            n[0] = 0;
+            text_cat(n, "GLO AGAIN DELETES LOOP ");
+            int_text(ui.sel_slot + 1, n + text_len(n));
+            centred(130, &FONT_T, n, RGB(240, 96, 96));
+        } else {
+            centred(130, &FONT_T, "TURN LOOP TO PLAY ONE. GLO DELETES", ST_TEXT);
+        }
         loops_library(acc);
         return;
     }
+    centred(130, &FONT_T, hint, ST_TEXT);
     centred(145, &FONT_T, TIP[set.page - PG_LOOP][0], ST_SOFT);
     centred(156, &FONT_T, TIP[set.page - PG_LOOP][1], ST_SOFT);
 }
 
 /* the CHORDS screen: SIMPLE, BUILD and PLAY as tabs. SIMPLE shows the chord playing and the path, BUILD the
  * progression, PLAY the chord the keys last played */
+static void tabs3(const char *const tab[3], int first, rgb_t acc)
+{
+    int32_t i;
+    for (i = 0; i < 3; i++) {
+        int32_t cx = 40 + i * 80, w = text_w(&FONT_T, tab[i]);
+        int on = set.page == first + i;
+        if (on)
+            pill(cx - w / 2 - 6, 40, w + 12, 14, c565(acc));
+        cv_text(cx - w / 2, 41, &FONT_T, tab[i], on ? ST_BG : ST_DIM);
+    }
+}
+
 static void chords_tabs(rgb_t acc)
 {
     static const char *const TAB[3] = {"SIMPLE", "BUILD", "PLAY"};
-    int32_t i;
-    for (i = 0; i < 3; i++) {
-        int32_t cx = 40 + i * 80, w = text_w(&FONT_T, TAB[i]);
-        int on = set.page == PG_CHORDS + i;
-        if (on)
-            pill(cx - w / 2 - 6, 40, w + 12, 14, c565(acc));
-        cv_text(cx - w / 2, 41, &FONT_T, TAB[i], on ? ST_BG : ST_DIM);
-    }
+    tabs3(TAB, PG_CHORDS, acc);
 }
 
 /* MINE's chords by name, the one playing lit */
@@ -479,9 +487,9 @@ static void simple_view(void)
     centred(62, &FONT_B, t, c565(acc));
     t[0] = 0;
     if (set.chords[0]) {
-        text_cat(t, "HELD ON ");
+        text_cat(t, "STAYING ON ");
         text_cat(t, ROMAN[set.chords[0] - 1]);
-        text_cat(t, ". CHORD TO AUTO TO MOVE");
+        text_cat(t, " UNTIL CHORD IS AUTO");
     } else {
         text_cat(t, "PATH ");
         text_cat(t, PATH_NAME[set.chords[2]]);
@@ -494,17 +502,13 @@ static void simple_view(void)
     if (set.chords[2] == PATH_MINE)
         mine_row(104, acc);
     else if (set.chords[2] == PATH_BUILT)
-        centred(104, &FONT_T, "YOUR BUILD PAGE CHORDS", ST_SOFT);
-    if (ui.mine_t && plat_ms() - ui.mine_t < BUILD_WAIT && set.mine_n < 4) {
-        t[0] = 0;
-        text_cat(t, "TAP ");
-        int_text(set.mine_n + 1, t + 4);
-        text_cat(t, " OF 4, OR WAIT TO KEEP THESE");
-        centred(140, &FONT_T, t, ST_TEXT);
+        centred(104, &FONT_T, "PLAYING YOUR CHORDS FROM BUILD", ST_SOFT);
+    if (ui.mine_t && since(plat_ms(), ui.mine_t) < (int32_t)BUILD_WAIT && set.mine_n < 4) {
+        centred(140, &FONT_T, "TAP ANOTHER, OR WAIT TO KEEP THESE", ST_TEXT);
     } else {
-        centred(140, &FONT_T, "KEYS: YOUR OWN PROGRESSION, UP TO 4", ST_SOFT);
+        centred(140, &FONT_T, "TAP UP TO 4 KEYS FOR YOUR OWN CHORDS", ST_SOFT);
     }
-    centred(152, &FONT_T, "SADDER OR BRIGHTER: MOOD ON SETUP", ST_SOFT);
+    centred(152, &FONT_T, "SADDER OR BRIGHTER? TRY MOOD ON SETUP", ST_SOFT);
 }
 
 static void play_view(void)
@@ -525,7 +529,7 @@ static void play_view(void)
         text_cat(t, "EVERY KEY PLAYS ");
         text_cat(t, kind == MS_CHORD_MAJ ? "maj" : MS_CHORD_SUFFIX[kind]);
     } else {
-        text_cat(t, "EACH KEY PLAYS THE KEY'S CHORD ON IT");
+        text_cat(t, "EACH KEY PLAYS ITS CHORD IN THE KEY");
     }
     centred(88, &FONT_T, t, ST_TEXT);
     t[0] = 0;
@@ -533,7 +537,7 @@ static void play_view(void)
     text_cat(t, set.play[2] ? ", STRUMMED" : ", ALL AT ONCE");
     centred(102, &FONT_T, t, ST_SOFT);
     centred(140, &FONT_T, set.play[3] ? "THE MUSIC FOLLOWS YOUR CHORDS" : "THE MUSIC KEEPS ITS OWN CHORDS", ST_SOFT);
-    centred(152, &FONT_T, set.keys[3] == 1 ? "LISTEN IS ON: THEY GO INTO THE LOOP" : "LOOPED ONLY WHILE REC RECORDS",
+    centred(152, &FONT_T, set.keys[3] == 1 ? "WHAT YOU PLAY GOES INTO THE LOOP" : "IT ONLY LOOPS IF YOU PRESS REC",
             ST_SOFT);
 }
 
@@ -546,7 +550,7 @@ static void build_view(uint32_t now)
     char t[40];
     t[0] = 0;
     if (set.chords[0]) {
-        text_cat(t, "HELD BY SIMPLE'S CHORD: EDIT TO PLAY");
+        text_cat(t, "ON HOLD BY SIMPLE. CHANGE ONE TO PLAY");
     } else if (on && ms_vis.chord_slot < 0) {
         text_cat(t, ms_vis.live_root >= 0 && set.play[3] ? "FOLLOWING WHAT YOU PLAY" : "STARTING");
     } else if (on) {
@@ -555,7 +559,7 @@ static void build_view(uint32_t now)
         text_cat(t, " OF ");
         int_text(set.b_n, t + text_len(t));
     } else {
-        text_cat(t, "NOT PLAYING: EDIT ONE TO START");
+        text_cat(t, "NOT PLAYING YET. CHANGE ONE TO START");
     }
     if (!on || now / 600u & 1u)
         disc(12, 64, 3, on ? c565(acc) : ST_DIM);
@@ -582,15 +586,15 @@ static void build_view(uint32_t now)
             cv_text(x + 28 - w / 2, y + 16, &FONT_T, LEN_NAME[set.b_len[i]], ST_SOFT);
         }
     }
-    if (ui.build_t && now - ui.build_t < BUILD_WAIT && ui.sel_chord + 1 < MS_NBUILT) {
+    if (ui.build_t && since(now, ui.build_t) < (int32_t)BUILD_WAIT && ui.sel_chord + 1 < MS_NBUILT) {
         t[0] = 0;
-        text_cat(t, "NEXT KEY: CHORD ");
+        text_cat(t, "NEXT KEY GOES TO CHORD ");
         int_text(ui.sel_chord + 2, t + text_len(t));
         centred(146, &FONT_T, t, ST_TEXT);
     } else {
         centred(146, &FONT_T, "TAP A KEY TO CHANGE THIS CHORD", ST_SOFT);
     }
-    centred(158, &FONT_T, "REMOVE: TURN LENGTH FULLY LEFT, PRESS REC", ST_SOFT);
+    centred(158, &FONT_T, "GLO REMOVES THIS CHORD", ST_SOFT);
 }
 
 static void chords_view(uint32_t now)
@@ -604,6 +608,107 @@ static void chords_view(uint32_t now)
         simple_view();
 }
 
+/* the BEAT screen: BEAT (the kit, pattern and bass by name, and the pattern's steps), DRUMS (a row of sixteenths per
+ * drum, the chosen one lit) and BASS (the line's sixteen notes, as roles in the chord) */
+static void beat_grid(int32_t y0, int32_t rh, int edit, rgb_t acc)
+{
+    static const char *const SHORT[MS_NDRUMS] = {"KICK", "SNARE", "GHOST", "HAT", "OPEN", "PERC"};
+    uint16_t rows[MS_NDRUMS];
+    int32_t r, i, len = beat_rows(rows), play = ms_vis.playing && set.beat[set.mode][0] ? (int32_t)ms_vis.beat_step : -1;
+    for (r = 0; r < MS_NDRUMS; r++) {
+        int32_t y = y0 + r * rh;
+        int sel = edit && r == set.drum_sel;
+        if (sel)
+            pill(2, y - 1, 236, rh, ST_LINE);
+        cv_text(6, y, &FONT_T, SHORT[r], sel ? c565(acc) : ST_SOFT);
+        for (i = 0; i < len; i++) {
+            int32_t x = 52 + i * 11;
+            if (rows[r] >> i & 1u)
+                fill(x, y + 1, 8, rh - 4, i == play ? ST_TEXT : c565(acc));
+            else
+                fill(x + 3, y + rh / 2 - 1, 2, 2, (i & 3) == 0 ? ST_SOFT : ST_DIM);
+        }
+    }
+    if (play >= 0)
+        fill(52 + play * 11, y0 + MS_NDRUMS * rh, 8, 2, ST_TEXT);
+}
+
+static void beat_simple_view(rgb_t acc)
+{
+    const uint8_t *b = set.beat[set.mode];
+    char t[48];
+    t[0] = 0;
+    text_cat(t, b[0] ? MS_KIT_NAME[b[0]] : "NO");
+    text_cat(t, " KIT, ");
+    text_cat(t, MS_PATTERN_NAME[b[1]]);
+    text_cat(t, ", BASS ");
+    text_cat(t, MS_BASS_NAME[b[3]]);
+    centred(58, &FONT_T, t, ST_TEXT);
+    beat_grid(72, 10, 0, acc);
+    centred(140, &FONT_T, b[0] ? "MAKE YOUR OWN ON DRUMS AND BASS" : "TURN KIT TO HEAR A BEAT", ST_SOFT);
+    centred(152, &FONT_T, "SWING IS ON THE DRUMS PAGE", ST_SOFT);
+}
+
+static void drums_view(rgb_t acc)
+{
+    const uint8_t *b = set.beat[set.mode];
+    char t[32];
+    t[0] = 0;
+    text_cat(t, b[0] ? MS_KIT_NAME[b[0]] : "NO");
+    text_cat(t, " KIT, ");
+    text_cat(t, b[1] == PAT_MINE ? "YOUR PATTERN" : MS_PATTERN_NAME[b[1]]);
+    centred(56, &FONT_T, t, ST_TEXT);
+    centred(140, &FONT_T, "THE FIRST 16 KEYS ARE THE STEPS", ST_SOFT);
+    centred(152, &FONT_T, "HIGHER KEYS PICK THE DRUM", ST_SOFT);
+    beat_grid(70, 11, 1, acc);
+}
+
+static void bass_view(rgb_t acc)
+{
+    static const char *const CELL[MS_NBN] = {"", "ROOT", "3RD", "5TH", "7TH", "OCT", "LEAD"};
+    int32_t i, play = ms_vis.playing ? (int32_t)((ms_vis.step - 1u) & 15u) : -1;   /* step is already the next one */
+    char t[32];
+    int mine = set.beat[set.mode][3] == BASS_MINE;
+    t[0] = 0;
+    if (!mine) {
+        text_cat(t, "BASS ");
+        text_cat(t, MS_BASS_NAME[set.beat[set.mode][3]]);
+        text_cat(t, ". TAP A STEP FOR YOUR OWN");
+    } else if (ms_vis.chord_root >= 0) {
+        text_cat(t, "PLAYING UNDER ");
+        text_cat(t, MS_NOTE_NAME[ms_vis.chord_root]);
+        text_cat(t, MS_CHORD_SUFFIX[ms_vis.chord_kind]);
+    }
+    centred(58, &FONT_T, t, ST_TEXT);
+    for (i = 0; i < 16; i++) {
+        int32_t x = 4 + (i % 8) * 29, y = 72 + (i / 8) * 30, w;
+        int b = mine ? set.bass_line[i] : 0;   /* not MINE: the stored line is not what plays */
+        if (i == play)
+            fill(x + 1, y + 23, 25, 3, ST_TEXT);
+        else
+            fill(x + 1, y + 25, 25, 1, (i & 3) == 0 ? ST_SOFT : ST_DIM);
+        if (b) {
+            w = text_w(&FONT_T, CELL[b]);
+            cv_text(x + 14 - w / 2, y + 7, &FONT_T, CELL[b], mine ? c565(acc) : ST_SOFT);
+        }
+    }
+    centred(140, &FONT_T, "THE FIRST 16 KEYS ARE THE STEPS", ST_SOFT);
+    centred(152, &FONT_T, "HIGHER KEYS PICK THE NOTE", ST_SOFT);
+}
+
+static void beat_view(void)
+{
+    static const char *const TAB[3] = {"BEAT", "DRUMS", "BASS"};
+    rgb_t acc = MODE_ACCENT[set.mode];
+    tabs3(TAB, PG_BEAT, acc);
+    if (set.page == PG_DRUMS)
+        drums_view(acc);
+    else if (set.page == PG_BASS)
+        bass_view(acc);
+    else
+        beat_simple_view(acc);
+}
+
 static void studio_draw(uint32_t now)
 {
     int half;
@@ -615,6 +720,8 @@ static void studio_draw(uint32_t now)
             loops_view(now);
         } else if (set.view == VIEW_CHORDS) {
             chords_view(now);
+        } else if (set.view == VIEW_BEAT) {
+            beat_view();
         } else {
             studio_meters(now);
             studio_wheel(now);

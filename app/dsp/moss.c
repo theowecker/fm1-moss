@@ -218,7 +218,8 @@ static void pan_gains(float pan, float *l, float *r)   /* equal power, pan -1..1
 }
 
 enum { C_MODE, C_MACRO, C_MIX, C_TEMPO, C_ROOT, C_MOOD, C_PLAY, C_FREEZE, C_NEW, C_NOTE, C_PANIC, C_SEED, C_SHED, C_KEYSET,
-       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION, C_CHORDS, C_CHORDNOTE };
+       C_LOOP, C_LOOPSET, C_FX, C_SPACE, C_BEAT, C_TRACK, C_SNAP, C_LOAD, C_LOOPFX, C_MOTION, C_CHORDS, C_CHORDNOTE,
+       C_EVOLVE };
 typedef struct {
     uint8_t type;
     int16_t a, b;
@@ -331,6 +332,16 @@ static const int8_t PATHS[5][4] = {
     {0, 4, 5, 3},                      /* SONG: I V vi IV */
     {0, 3, 0, 3},                      /* DRONE: I IV */
 };
+/* EVOLVE: over minutes the HOME knobs wander a little around where they are set, the scene's chords now and then
+ * take a neighbour, a scene starts on a chord of its path picked by chance, and the beat gets busier and calmer */
+static struct {
+    float amount, pace, chords, beat;
+    float off[MS_NMACRO], target[MS_NMACRO];   /* knob points added to the HOME knobs, and where each is heading */
+    int8_t applied[MS_NMACRO];         /* the points the sound has now */
+    float t, apply_t;                  /* seconds to the next new target, and to the next apply */
+    float busy, busy_target;
+} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, 30.0f, 0.0f, 0.0f, 0.0f};
+
 static const float RATE_MUL[4] = {0.0f, 2.0f, 1.0f, 0.5f};   /* times the scene's chord length; 0: never by itself */
 
 static int deg_semis(int deg)   /* any octave, including negative degrees */
@@ -470,6 +481,8 @@ static int chord_next(const int8_t *prog, int peek)
         return hc.mine[i];
     if (hc.path > 0)
         return PATHS[hc.path - 1][i];
+    if (prog && !peek && frand() < 0.25f * evo.chords)   /* EVOLVE: now and then a neighbour sharing two notes */
+        return (prog[i] + (frand() < 0.5f ? 2 : 5)) % 7;
     return prog ? prog[i] : hm.degree + MOVE[irand(8)];
 }
 
@@ -482,6 +495,20 @@ static int chord_first(int scene_first)
 {
     return hc.lock >= 0 ? hc.lock : hc.path == PATH_BUILT ? CH_BUILT : hc.path == PATH_MINE ? hc.mine[0]
          : hc.path > 0 ? PATHS[hc.path - 1][0] : scene_first;
+}
+
+/* where a scene's path starts: its first chord, or with EVOLVE's CHORDS now and then another of the four, so a scene
+ * is not the same each time. The player's own paths, and a held chord, start where they are */
+static int start_index(void)
+{
+    return hc.lock < 0 && hc.path < PATH_MINE && frand() < evo.chords * 1.5f ? irand(4) : 0;
+}
+
+static int chord_at(const int8_t *prog, int i)
+{
+    static const int8_t WANDER[4] = {0, 3, 5, 4};   /* DRIFT has no path of its own: I, IV, vi or V */
+    return hc.lock >= 0 || hc.path >= PATH_MINE ? chord_first(prog ? prog[0] : 0)
+         : hc.path > 0 ? PATHS[hc.path - 1][i] : prog ? prog[i] : WANDER[i];
 }
 
 /* the root of chord id, semitones above the key root */
@@ -532,12 +559,18 @@ static uint32_t vo_clock;
 
 /* a sound cut short leaves a step in the output; its last sample is handed here and fades over a few ms */
 static float dk_l, dk_r;
+static float dkl_l, dkl_r;             /* the loop's own: its voices sound through its tape, so their cut must too */
 
 static void voice_cut(voice_t *v)
 {
     if (v->stage != ST_OFF) {
-        dk_l += v->out_l;
-        dk_r += v->out_r;
+        if (v->layer == SRC_LOOP) {
+            dkl_l += v->out_l;
+            dkl_r += v->out_r;
+        } else {
+            dk_l += v->out_l;
+            dk_r += v->out_r;
+        }
     }
     v->stage = ST_OFF;
     v->out_l = v->out_r = 0.0f;
@@ -743,8 +776,9 @@ HOT float voice_tick(voice_t *v, float wm)
 /* monophonic, gliding */
 static struct {
     float ph, inc, target, glide, env, env_target, env_rate, amp;
+    float fm;                          /* TONE: how much the sine bends itself, round to growl */
     int32_t gate;
-} bass;
+} bass = {.fm = 0.035f};
 
 static void bass_note(int note, float vel, int32_t gate, float glide_secs, float atk)
 {
@@ -765,7 +799,7 @@ HOT float bass_tick(void)
     bass.inc += bass.glide * (bass.target - bass.inc);
     bass.env += bass.env_rate * (bass.env_target - bass.env);
     bass.ph = wrap1(bass.ph + bass.inc);
-    return sin_t(bass.ph + 0.035f * sin_t(bass.ph)) * bass.env * bass.amp;
+    return sin_t(bass.ph + bass.fm * sin_t(bass.ph)) * bass.env * bass.amp;
 }
 
 enum { EV_NOTE, EV_KICK, EV_SNARE, EV_GHOST, EV_HAT, EV_OHAT, EV_PERC };
@@ -799,12 +833,13 @@ static void ev_add(int32_t delay, int type, int kind, int note, float vel, int l
 }
 
 enum { KIT_OFF, KIT_SOFT, KIT_LOFI, KIT_BRUSH, KIT_PULSE, KIT_TICK, KIT_WOOD, KIT_N };
-enum { BASS_AUTO, BASS_OFF, BASS_ROOT, BASS_WALK, BASS_N };
-#define PAT_N 10
+enum { BASS_AUTO, BASS_OFF, BASS_ROOT, BASS_WALK, BASS_MINE, BASS_N };
+#define PAT_N 11
+#define PAT_MINE 10
 const char *const MS_KIT_NAME[KIT_N] = {"OFF", "SOFT", "LOFI", "BRUSH", "PULSE", "TICK", "WOOD"};
 const char *const MS_PATTERN_NAME[PAT_N] = {"AUTO", "BOOMBAP", "HALF", "FOUR", "BOSSA", "HEART", "SHUFFLE", "BROKEN",
-                                            "WALTZ", "SPARSE"};
-const char *const MS_BASS_NAME[BASS_N] = {"AUTO", "OFF", "ROOT", "WALK"};
+                                            "WALTZ", "SPARSE", "MINE"};
+const char *const MS_BASS_NAME[BASS_N] = {"AUTO", "OFF", "ROOT", "WALK", "MINE"};
 
 /* each kit is the same four voices tuned differently: kick, snare (or rim, brush, breath, clap), hat (or shaker) and
  * an FM ping (ride, woodblock, blip) */
@@ -849,12 +884,23 @@ static const pattern_t PATTERNS[PAT_N] = {
     {B(0) | B(6) | B(11), B(4) | B(13), B(9), 0x5555u, 0, B(14), 16, 0.1f, 0.15f},
     {B(0), B(4) | B(8), 0, B(2) | B(6) | B(10), 0, B(0), 12, 0.1f, 0.0f},
     {B(0), B(12), 0, B(4) | B(12), 0, B(6) | B(14), 16, 0.1f, 0.0f},
+    {0},                               /* MINE: from ub */
 };
 
 static struct {
     int kit, pattern, bass;
     float level;
-} bt;
+    float swing;                       /* < 0: the pattern's own */
+    float bass_len, bass_glide;        /* in sixteenths, in seconds */
+} bt = {0, 0, 0, 1.0f, -1.0f, 3.0f, 0.0f};
+
+/* MINE: the player's own beat and bass line */
+static struct {
+    uint16_t row[MS_NDRUMS];
+    float level[MS_NDRUMS], chance[MS_NDRUMS];
+    uint8_t bass[16];
+    uint8_t len;                       /* 16, or 12 for a bar of three */
+} ub = {{0}, {0.9f, 0.9f, 0.3f, 0.7f, 0.6f, 0.7f}, {1, 1, 1, 1, 1, 1}, {0}, 16};
 
 static struct {
     float k_ph, k_f, k_penv, k_amp, k_pmul, k_amul, k_click;
@@ -1405,6 +1451,10 @@ static struct {
 
 static float beat_swing(void)
 {
+    if (bt.swing >= 0.0f)
+        return bt.swing;
+    if (bt.kit != KIT_OFF && bt.pattern == PAT_MINE)
+        return 0.15f;
     if (bt.kit != KIT_OFF && bt.pattern != 0)
         return PATTERNS[bt.pattern].swing;
     return st.mode == MODE_LOFI ? LOFI_STYLE[st.scene].swing : st.mode == MODE_SCAPES ? 0.08f : 0.0f;
@@ -1414,6 +1464,18 @@ static float beat_swing(void)
 static pattern_t beat_pattern(void)
 {
     pattern_t p;
+    if (bt.pattern == PAT_MINE) {
+        p.kick = ub.row[MS_DRUM_KICK];
+        p.snare = ub.row[MS_DRUM_SNARE];
+        p.ghost = ub.row[MS_DRUM_GHOST];
+        p.hat = ub.row[MS_DRUM_HAT];
+        p.ohat = ub.row[MS_DRUM_OPEN];
+        p.perc = ub.row[MS_DRUM_PERC];
+        p.len = ub.len;
+        p.swing = 0.15f;
+        p.hat16 = 0.0f;
+        return p;
+    }
     if (bt.pattern != 0)
         return PATTERNS[bt.pattern];
     if (st.mode != MODE_LOFI)
@@ -1462,17 +1524,55 @@ static void lofi_chord_hit(float vel, int ntones, int32_t gate)
     }
 }
 
+/* MINE plays exactly what was set: each drum at its level, each hit by its chance, with no fills of its own */
+static void mine_step(uint32_t s, int32_t hum)
+{
+    static const uint8_t EV[MS_NDRUMS] = {EV_KICK, EV_SNARE, EV_GHOST, EV_HAT, EV_OHAT, EV_PERC};
+    int d;
+    for (d = 0; d < MS_NDRUMS; d++) {
+        float v = ub.level[d];
+        if (!(ub.row[d] >> s & 1u) || frand() >= ub.chance[d] || v <= 0.0f)
+            continue;
+        if (d == MS_DRUM_HAT)
+            v *= (s & 3u) == 0 ? 1.0f : (s & 1u) ? 0.55f : 0.75f;
+        ev_add(hum + (d == MS_DRUM_SNARE ? (int32_t)(0.008f * MS_SR) : 0), EV[d], 0, d == MS_DRUM_PERC && (s & 4u),
+               v * (0.9f + 0.1f * frand()), 1, 0, 0.0f);
+    }
+}
+
+int ms_pattern_rows(int mode, int scene, int pattern, uint16_t rows[MS_NDRUMS], float *swing)
+{
+    pattern_t p;
+    pattern = clamp(pattern, 0, PAT_N - 1);
+    if (pattern == 0 && mode == MODE_LOFI) {
+        const lofi_style_t *ls = &LOFI_STYLE[clamp(scene, 0, MS_NSCENES[MODE_LOFI] - 1)];
+        p.kick = ls->kick, p.snare = ls->snare, p.ghost = ls->ghost, p.hat = ls->hat, p.ohat = ls->ohat, p.perc = 0;
+        p.len = 16, p.swing = ls->swing;
+    } else {
+        p = PATTERNS[pattern == 0 || pattern == PAT_MINE ? 9 : pattern];
+    }
+    if (swing)
+        *swing = p.swing;
+    rows[MS_DRUM_KICK] = p.kick, rows[MS_DRUM_SNARE] = p.snare, rows[MS_DRUM_GHOST] = p.ghost;
+    rows[MS_DRUM_HAT] = p.hat, rows[MS_DRUM_OPEN] = p.ohat, rows[MS_DRUM_PERC] = p.perc;
+    return p.len;
+}
+
 static void beat_step(void)
 {
     pattern_t p = beat_pattern();
     uint32_t s = seq.step % p.len, bit = 1u << s, bar = seq.step / p.len;
     int32_t hum = (int32_t)(frand() * 0.006f * MS_SR);
-    float busy = kb.energy, v;
+    float busy = fm_minf(kb.energy + evo.busy, 1.0f), v;
     ms_vis.drums[0] = p.kick;
     ms_vis.drums[1] = p.snare;
     ms_vis.drums[2] = p.hat;
     ms_vis.beat_len = p.len;
     ms_vis.beat_step = (uint8_t)s;
+    if (bt.pattern == PAT_MINE) {
+        mine_step(s, hum);
+        return;
+    }
     if (p.kick & bit)
         ev_add(hum, EV_KICK, 0, 0, s == 0 ? 1.0f : 0.8f, 1, 0, 0.0f);
     else if (s == p.len - 2u && frand() < 0.15f + 0.3f * busy)
@@ -1499,9 +1599,21 @@ static void backing_bass_step(void)
     uint32_t s = seq.step % p.len;
     float sixteenth = 60.0f / (float)st.tempo / 4.0f * MS_SR;
     int root = 36 + (st.root + hm.tones[0]) % 12, n;
+    int32_t gate = (int32_t)(sixteenth * bt.bass_len);
+    if (bt.bass == BASS_MINE) {         /* the line follows the chord: its root, 3rd, 5th, 7th */
+        static const int8_t TONE[MS_NBN] = {0, 0, 1, 2, 3, 0, 0};
+        int b = ub.bass[seq.step & 15u];
+        if (!b)
+            return;
+        n = b == MS_BN_STEP ? root - 1 : 36 + (st.root + hm.tones[TONE[b]]) % 12 + (b == MS_BN_OCT ? 12 : 0);
+        if (n < root && b != MS_BN_STEP)
+            n += 12;
+        bass_note(n, (seq.step & 15u) == 0 ? 0.9f : 0.72f, gate, bt.bass_glide, 0.004f);
+        return;
+    }
     if (bt.bass == BASS_ROOT) {
         if ((p.kick >> s & 1u) || s == 0)
-            bass_note(root, s == 0 ? 0.9f : 0.75f, (int32_t)(sixteenth * 3.0f), 0.0f, 0.004f);
+            bass_note(root, s == 0 ? 0.9f : 0.75f, gate, bt.bass_glide, 0.004f);
         return;
     }
     if (s % 4u)
@@ -1520,7 +1632,7 @@ static void backing_bass_step(void)
         n = root + (frand() < 0.5f ? -1 : 2);   /* step toward the root of the next bar */
         break;
     }
-    bass_note(n, s == 0 ? 0.85f : 0.65f, (int32_t)(sixteenth * 3.5f), 0.0f, 0.004f);
+    bass_note(n, s == 0 ? 0.85f : 0.65f, gate, bt.bass_glide, 0.004f);
 }
 
 static void lofi_step(void)
@@ -1742,11 +1854,14 @@ static void drift_pads(float dt)
 static float lvl(int m) { return (float)m * (float)m * (1.0f / 4900.0f); }   /* 70 = unity, 100 = +6 dB */
 static float u(int m) { return (float)m * 0.01f; }
 
+/* a HOME knob as it sounds: where it is set, plus EVOLVE's drift */
+static float mac(int i) { return u(clamp(st.macro[i] + (int)evo.off[i], 0, 100)); }
+
 static void apply(void)
 {
     int i, tone_i = st.mode == MODE_LOFI ? 0 : st.mode == MODE_SCAPES ? 2 : 1;
-    float space = u(st.macro[3]);
-    k.tone_fc = 350.0f * fm_exp2f(u(st.macro[tone_i]) * 5.5f);
+    float space = mac(3), base;
+    k.tone_fc = 350.0f * fm_exp2f(mac(tone_i) * 5.5f);
     k.rev_mix = 0.12f + 0.75f * space;
     k.rev_rt = 1.2f + 11.0f * space * space;
     k.rev_size = 0.55f + 0.45f * space;
@@ -1754,9 +1869,7 @@ static void apply(void)
     k.tone_fc = fm_maxf(k.tone_fc * (1.0f - 0.55f * k.film), 300.0f);
     k.echo_mix = u(st.fx[0]) * (0.9f + 1.2f * u(st.fx[0]));   /* gentle low, and at the top the repeats take over */
     k.echo_fb = u(st.fx[2]) * 0.88f;
-    echo_len_target = fm_minf(DIV_BEATS[clamp(st.fx[1], 0, 5)] * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
-    mo.time_base = echo_len_target;
-    mo.time_hold = 0.0f;
+    base = fm_minf(DIV_BEATS[clamp(st.fx[1], 0, 5)] * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
     k.shimmer = k.reverse = k.damp_hz = 0.0f;
     k.chorus = k.trem = k.radio = k.wob_add = k.alg_rand = k.echo_hp_min = 0.0f;
     k.hp_a = onepole_a(500.0f);          /* RADIO's; kept so it fades out through the same filter */
@@ -1806,8 +1919,7 @@ static void apply(void)
     case SP_DUB:                         /* dotted echoes that keep going, dark and thin, over a small spring */
         k.echo_mix = fm_maxf(k.echo_mix, 0.9f);
         k.echo_fb = fm_maxf(k.echo_fb, 0.72f);
-        echo_len_target = fm_minf(0.75f * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
-        mo.time_base = echo_len_target;
+        base = fm_minf(0.75f * 60.0f / (float)st.tempo * MS_SR * 0.5f, (float)(ECHO_N - 4));
         k.echo_lp_max = onepole_a(1600.0f);
         k.echo_hp_min = onepole_a(280.0f);
         k.echo_to_rev = 0.2f;
@@ -1863,17 +1975,17 @@ static void apply(void)
         st.layer[i] = lvl(st.mix[i]);
     switch (st.mode) {
     case MODE_LOFI:
-        k.dust = u(st.macro[1]);
-        k.wobble = u(st.macro[2]);
+        k.dust = mac(1);
+        k.wobble = mac(2);
         k.crush_bits = k.dust > 0.4f ? fm_exp2f(15.0f - 6.0f * (k.dust - 0.4f) / 0.6f) : 0.0f;
         k.rain = st.mix[3] ? 0.55f : 0.0f;
         k.rain_tone = 5000.0f;
         break;
     case MODE_SCAPES: {
         const scape_style_t *ss = &SCAPE_STYLE[st.scene];
-        float w = 0.3f + 1.4f * u(st.macro[0]);
-        k.weather = u(st.macro[0]);
-        k.life = u(st.macro[1]);
+        float w = 0.3f + 1.4f * mac(0);
+        k.weather = mac(0);
+        k.life = mac(1);
         k.wind = fm_minf(ss->wind * w, 1.0f);
         k.rain = fm_minf(ss->rain * w, 1.0f);
         k.surf = fm_minf(ss->surf * w, 1.0f);
@@ -1887,13 +1999,18 @@ static void apply(void)
         break;
     }
     case MODE_DRIFT:
-        k.density = u(st.macro[0]);
-        k.drift = u(st.macro[2]);
+        k.density = mac(0);
+        k.drift = mac(2);
         k.wind = 0.3f;
-        k.pad_bright = DRIFT_STYLE[st.scene].pad_bright * (0.5f + u(st.macro[1]));
+        k.pad_bright = DRIFT_STYLE[st.scene].pad_bright * (0.5f + mac(1));
         k.bird_rate = DRIFT_STYLE[st.scene].bird ? 4.0f : 0.0f;
         break;
     }
+    if (mo.time_hold <= 0.0f || base != mo.time_base) {   /* a MOTION jump stays until its time is up */
+        echo_len_target = base;
+        mo.time_hold = 0.0f;
+    }
+    mo.time_base = base;
     svf_set(&ms.tone_l, k.tone_fc, 0.6f);
     svf_set(&ms.tone_r, k.tone_fc, 0.6f);
     reverb_params(st.frozen);
@@ -1920,8 +2037,8 @@ static void mode_start(void)
         ms_vis.beat_len = 16;
         ms_vis.drums[1] = LOFI_STYLE[st.scene].snare;
         ms_vis.drums[2] = LOFI_STYLE[st.scene].hat;
-        hm.prog_i = 0;
-        chord_set(chord_first(LOFI_STYLE[st.scene].prog[0]));
+        hm.prog_i = start_index();
+        chord_set(chord_at(LOFI_STYLE[st.scene].prog, hm.prog_i));
         break;
     case MODE_SCAPES:
         crickets_init(SCAPE_STYLE[st.scene].crickets);
@@ -1930,15 +2047,16 @@ static void mode_start(void)
             bd[i].syl_left = 0;
             bd[i].wait = (int32_t)((2.0f + 6.0f * frand()) * MS_SR);
         }
-        hm.prog_i = 0;                   /* the scene's own first chord, which STILL then keeps */
-        chord_set(chord_first(SCAPE_STYLE[st.scene].prog[0]));
-        hm.prog_i = -1;                  /* so the first change plays it, not the one after */
+        i = start_index();               /* the scene's start, which STILL then keeps */
+        hm.prog_i = i;
+        chord_set(chord_at(SCAPE_STYLE[st.scene].prog, i));
+        hm.prog_i = i - 1;               /* so the first change plays it, not the one after */
         seq.chord_t = 0.0f;
         seq.note_acc = 3.0f;
         break;
     case MODE_DRIFT:
-        hm.prog_i = 0;
-        chord_set(chord_first(0));
+        hm.prog_i = start_index();
+        chord_set(chord_at((const int8_t *)0, hm.prog_i));
         drift_regrow();
         if (bt.bass == BASS_AUTO)
             bass_note(36 + st.root % 12, 0.8f, -1, 1.6f, 3.0f);
@@ -2087,6 +2205,7 @@ static struct {
     float quiet;                       /* samples since the last key event */
     int track;                         /* where new notes go, 0..MS_NLAYERS - 1 */
     int redo;                          /* the layer the next phrase replaces, -1 none */
+    int adding;                        /* LISTEN: a phrase going onto a playing loop, until its pause */
     int keep;                          /* REC kept it: it no longer fades */
     int synced;                        /* a beat to follow: the loop is whole bars and its notes sit on the groove */
     float rec_off;                     /* where in the bar the recording began, samples */
@@ -2165,6 +2284,8 @@ static void loop_add(int note, float vel)
         e = &lp.ev[lp.n++];
     }
     e->t = loop_now();
+    if (lp.state == LP_PLAY)
+        lp.adding = 1;
     if (lp.synced && lp.state != LP_REC) {   /* an overdub lands on the groove; a recording is placed when it closes */
         e->t = groove_snap(e->t);
         if (e->t >= lp.len)
@@ -2371,6 +2492,9 @@ static void loop_tick(void)
     float rate, u1;
     int i, rev;
     lp.quiet += (float)CTL;
+    if (lp.quiet > 2.0f * MS_SR || lp.state != LP_PLAY)
+        lp.adding = 0;
+    ms_vis.lp_adding = (uint8_t)lp.adding;
     if (lp.state == LP_REC) {
         int open = 0;
         lp.pos += (float)CTL;
@@ -2648,10 +2772,10 @@ void ms_note_now(int note, int vel)
     lp.quiet = 0.0f;
     if (vel) {
         key_sound(h, note, (float)vel / 127.0f, SRC_KEYS, -1, 0.0f);
-        if (kb.listen && lp.state == LP_EMPTY) {
+        if (kb.listen && lp.state == LP_EMPTY)
             loop_tap();
+        if (kb.listen && lp.state == LP_REC)   /* LISTEN: once you play, a pause closes it, REC-started or not */
             lp.autorec = 1;
-        }
         if (loop_listening())
             loop_add(h[0], (float)vel / 127.0f);
         if (kb.listen)
@@ -2806,16 +2930,42 @@ static void live_chord(int note, int vel)
     if (kb.listen && lp.state == LP_PLAY && (lp.quiet > 2.0f * MS_SR || lp.redo >= 0))
         lp.track = loop_phrase_track();
     lp.quiet = 0.0f;
-    if (kb.listen && lp.state == LP_EMPTY) {
+    if (kb.listen && lp.state == LP_EMPTY)
         loop_tap();
+    if (kb.listen && lp.state == LP_REC)
         lp.autorec = 1;
-    }
     live_start_note(s);
     kb.energy = fm_minf(kb.energy + 0.12f, 1.0f);
     if (cp.follow && hc.lock < 0 && !st.frozen) {
         hm.pending = CH_LIVE;
         if (st.mode != MODE_LOFI)
             seq.chord_t = fm_minf(seq.chord_t, 0.2f);
+    }
+}
+
+static void evolve_tick(float dt)
+{
+    int i;
+    float rate = dt / (20.0f + 100.0f * (1.0f - evo.pace));   /* how fast the knobs ease to their targets */
+    if ((evo.t -= dt) <= 0.0f) {
+        evo.t = (30.0f + 210.0f * (1.0f - evo.pace)) * (0.5f + frand());
+        i = irand(MS_NMACRO);
+        evo.target[i] = frand2() * 25.0f * evo.amount;
+        evo.busy_target = frand() * 0.6f * evo.beat;
+    }
+    for (i = 0; i < MS_NMACRO; i++)
+        evo.off[i] += (evo.target[i] * (evo.amount > 0.0f) - evo.off[i]) * fm_minf(rate * 4.0f, 1.0f);
+    evo.busy += (evo.busy_target * (evo.beat > 0.0f) - evo.busy) * fm_minf(rate * 4.0f, 1.0f);
+    if ((evo.apply_t -= dt) <= 0.0f) {   /* the knobs' sound follows once a second, if they moved: apply() is not free */
+        int moved = 0;
+        evo.apply_t = 1.0f;
+        for (i = 0; i < MS_NMACRO; i++)
+            if ((int)evo.off[i] != evo.applied[i]) {
+                evo.applied[i] = (int8_t)(int)evo.off[i];
+                moved = 1;
+            }
+        if (moved)
+            apply();
     }
 }
 
@@ -2917,6 +3067,18 @@ static void drain(void)
         case C_CHORDNOTE:
             live_chord(c.a, c.b);
             break;
+        case C_EVOLVE: {
+            float v = u(clamp(c.b, 0, 100));
+            if (c.a == 0)
+                evo.amount = v;
+            else if (c.a == 1)
+                evo.pace = v;
+            else if (c.a == 2)
+                evo.chords = v;
+            else
+                evo.beat = v;
+            break;
+        }
         case C_PANIC:
             lp.state = LP_EMPTY;
             lp.n = 0;
@@ -2953,6 +3115,50 @@ static void drain(void)
             apply();
             break;
         case C_BEAT:
+            if (c.a >= 10 && c.a < 10 + MS_NDRUMS) {
+                ub.row[c.a - 10] = (uint16_t)c.b;
+                break;
+            }
+            if (c.a >= 20 && c.a < 20 + MS_NDRUMS) {
+                ub.level[c.a - 20] = u(clamp(c.b & 127, 0, 100));
+                ub.chance[c.a - 20] = u(clamp(c.b >> 7 & 127, 0, 100));
+                break;
+            }
+            if (c.a == 46) {
+                ub.len = c.b == 12 ? 12 : 16;
+                break;
+            }
+            if (c.a >= 30 && c.a < 46) {
+                ub.bass[c.a - 30] = (uint8_t)clamp(c.b, 0, MS_NBN - 1);
+                break;
+            }
+            if (c.a == 8) {              /* hear one drum now */
+                static const uint8_t EV[MS_NDRUMS] = {EV_KICK, EV_SNARE, EV_GHOST, EV_HAT, EV_OHAT, EV_PERC};
+                int d = clamp(c.b, 0, MS_NDRUMS - 1);
+                ev_add(0, EV[d], 0, 0, d == MS_DRUM_GHOST ? 0.35f : 0.85f, 1, 0, 0.0f);
+                break;
+            }
+            if (c.a == 9) {              /* hear one bass note on the chord now */
+                static const int8_t TONE[MS_NBN] = {0, 0, 1, 2, 3, 0, 0};
+                int b = clamp(c.b, 1, MS_NBN - 1), root = 36 + (st.root + hm.tones[0]) % 12;
+                int n = b == MS_BN_STEP ? root - 1 : 36 + (st.root + hm.tones[TONE[b]]) % 12 + (b == MS_BN_OCT ? 12 : 0);
+                if (n < root && b != MS_BN_STEP)
+                    n += 12;
+                bass_note(n, 0.8f, (int32_t)(60.0f / (float)st.tempo * MS_SR), bt.bass_glide, 0.004f);
+                break;
+            }
+            if (c.a >= 4 && c.a <= 7) {
+                int v = clamp(c.b, 0, 100);
+                if (c.a == 4)
+                    bt.swing = v ? 0.04f * (float)(clamp(v, 1, 9) - 1) : -1.0f;
+                else if (c.a == 5)
+                    bass.fm = 0.035f + 0.9f * u(v) * u(v);
+                else if (c.a == 6)
+                    bt.bass_glide = 0.12f * u(v) * u(v);
+                else
+                    bt.bass_len = (float)clamp(v, 1, 8);
+                break;
+            }
             if (c.a == 0)
                 bt.kit = clamp(c.b, 0, KIT_N - 1);
             else if (c.a == 1)
@@ -2961,8 +3167,8 @@ static void drain(void)
                 bt.level = lvl(clamp(c.b, 0, 100));
             else
                 bt.bass = clamp(c.b, 0, BASS_N - 1);
-            if (c.a == 3 && bt.bass == BASS_OFF)
-                bass.env_target = 0.0f;
+            if (c.a == 3 && (bt.bass == BASS_OFF || (bt.bass >= BASS_ROOT && bass.gate < 0)))
+                bass.env_target = 0.0f;      /* and AUTO's held drone gives way to the steps */
             if (c.a == 3 && bt.bass == BASS_AUTO && st.mode == MODE_DRIFT && st.playing)
                 bass_note(36 + ((st.root + hm.tones[0]) % 12), 0.8f, -1, 1.6f, 2.5f);
             if (c.a == 0 && bt.kit == KIT_OFF) {
@@ -2977,7 +3183,17 @@ static void drain(void)
             apply();
             break;
         case C_LOOP:
-            if (c.a) {
+            if (c.a == 2) {              /* REC: keep it. A recording closes; what you add is a layer now */
+                int add = lp.state == LP_PLAY && lp.keep && !kb.listen && !kb.hold;   /* by hand: kept, then a layer */
+                if (lp.state == LP_EMPTY || lp.state == LP_REC || lp.state == LP_DUB || add)
+                    loop_tap();
+                if (lp.state == LP_PLAY) {
+                    loop_close(-1);
+                    lp.keep = 1;
+                    lp.adding = 0;
+                    lp.quiet = 3.0f * MS_SR;   /* the next note starts a new layer, as after a pause */
+                }
+            } else if (c.a) {
                 lp.state = LP_EMPTY;
                 lp.n = 0;
                 lp.autorec = 0;
@@ -3299,6 +3515,7 @@ static void control(void)
     loop_tick();
     seeds_tick(dt);
     live_tick(dt);
+    evolve_tick(dt);
     motion_tick(dt);
     kb.energy *= 1.0f - dt / 20.0f;
     if (st.playing && !st.switching) {
@@ -3306,7 +3523,7 @@ static void control(void)
         while (seq.acc <= 0.0f) {
             if (bt.kit != KIT_OFF)
                 beat_step();
-            if (bt.bass == BASS_ROOT || bt.bass == BASS_WALK)
+            if (bt.bass == BASS_ROOT || bt.bass == BASS_WALK || bt.bass == BASS_MINE)
                 backing_bass_step();
             if (st.mode == MODE_LOFI)
                 lofi_step();
@@ -3403,6 +3620,10 @@ PLAT_RAM_CODE static void render_block(float *out_l, float *out_r, uint32_t n)
             rs_r += s * v->pr * v->rev * send;
             es += s * v->echo * send * (v->layer >= SRC_KEYS ? 2.5f : 1.0f);   /* what you play is what the delay is for */
         }
+        lb_l += dkl_l;
+        lb_r += dkl_r;
+        dkl_l = h_flush(dkl_l * 0.993f);
+        dkl_r = h_flush(dkl_r * 0.993f);
         if (lb_l != 0.0f || lb_r != 0.0f || lfx.lp_l != 0.0f) {   /* the loop's tape: aged, then driven */
             lfx.lp_l += lfx.age_a * (lb_l - lfx.lp_l);
             lfx.lp_r += lfx.age_a * (lb_r - lfx.lp_r);
@@ -3768,7 +3989,9 @@ void ms_play(int on) { post(C_PLAY, on, 0); }
 void ms_freeze(int on) { post(C_FREEZE, on, 0); }
 void ms_new(void) { post(C_NEW, 0, 0); }
 void ms_note(int note, int vel) { post(C_NOTE, note, vel); }
+void ms_loop_keep(void) { post(C_LOOP, 2, 0); }
 void ms_chord_note(int note, int vel) { post(C_CHORDNOTE, note, vel); }
+void ms_evolve(int i, int v) { post(C_EVOLVE, i, v); }
 void ms_panic(void) { post(C_PANIC, 0, 0); }
 void ms_seed(uint32_t s) { post(C_SEED, (int)(s >> 16 & 0x7FFF), (int)(s & 0x7FFF)); }
 void ms_sleep_fade(float level) { st.sleep_target = fm_clampf(level, 0.0f, 1.0f); }

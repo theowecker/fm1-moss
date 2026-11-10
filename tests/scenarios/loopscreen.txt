@@ -5,7 +5,7 @@ wait 50
 expect page 5
 turn SELECT 1
 wait 50
-expect page 13
+expect page 16
 expect view 0
 turn SELECT -1
 wait 50
@@ -47,17 +47,22 @@ wait 100
 expect tracks 1
 shot ls-off.png
 turn K2 35
-# REDO: the next phrase replaces layer 1
+# MUTE: layer 1 silent but kept; GLO takes the chosen layer out and the next phrase is its new take
 turn K3 1
 wait 50
-expect redo 0
-shot ls-redo.png
+expect muted 1
+turn K3 -1
+wait 50
+expect muted 0
+shot ls-mute.png
+tap GLO
+wait 100
+expect tracks 0
 wait 2500
 tapkey 14
 wait 200
 tapkey 16
-wait 100
-expect redo -1
+wait 2500
 expect tracks 1
 expect loopn 2
 # later phrases go on new layers, past four
@@ -74,17 +79,16 @@ tapkey 14
 wait 300
 expect tracks 63
 shot ls-five.png
-# CLEAR: layer 2 picked, a full turn right
+# GLO on LAYERS takes out the chosen layer; elsewhere it undoes the newest
 turn K1 1
 wait 50
 expect layer 1
 turn K4 25 10
 wait 50
 expect tracks 63
-tap REC
+tap GLO
 wait 100
 expect tracks 61
-expect keep 1
 tap HOME
 wait 50
 expect view 1
@@ -97,6 +101,10 @@ tap SEQ
 wait 50
 expect view 3
 expect page 10
+tap SEQ
+wait 50
+expect view 4
+expect page 13
 tap SEQ
 wait 50
 expect view 0

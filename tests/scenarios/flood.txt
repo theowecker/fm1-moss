@@ -8,9 +8,9 @@ turn PRESET 3 1
 wait 4000
 expect loop 2
 expect slot0 2
-press REC
+press GLO
 wait 1100
-release REC
+release GLO
 tapkey 9
 wait 300
 tapkey 12

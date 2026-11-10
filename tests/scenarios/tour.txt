@@ -44,9 +44,9 @@ tap SEL
 wait 100
 expect page 1
 shot mix.png
-tap GLO
+turn SELECT -2
 wait 100
-expect page 13
+expect page 16
 shot setup.png
 turn SELECT 1
 wait 100

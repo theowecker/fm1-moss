@@ -15,9 +15,9 @@ tap REC
 wait 100
 expect loop 2
 expect bars1000 2000
-press REC
+press GLO
 wait 1100
-release REC
+release GLO
 wait 50
 tapkey 9
 wait 1500

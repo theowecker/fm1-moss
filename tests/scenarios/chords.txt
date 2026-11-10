@@ -1,8 +1,9 @@
 # CHORDS: CHORD moves the music to a degree of the key and keeps it there; COLOR changes the chord where the key
 # allows (SUS on IV in C would need Bb, so it stays as it is); STILL holds the chord
 wait 600
-tap GLO
-tap GLO
+tap SEQ
+tap SEQ
+tap SEQ
 wait 50
 expect page 10
 turn K1 4
@@ -22,6 +23,7 @@ wait 6000
 expect chordroot 2
 turn K4 -2
 turn K2 2
+tap SEQ
 tap SEQ
 wait 1500
 shot chords-studio.png

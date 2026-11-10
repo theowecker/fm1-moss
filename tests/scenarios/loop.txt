@@ -39,12 +39,12 @@ expect tracks 3
 shot tracks.png
 tap SEQ
 tap SEQ
-press REC
+press GLO
 wait 1600
-release REC
+release GLO
 wait 50
 expect loop 0
-# REC by hand: records, closes the loop, then keeps it from fading or lets it fade again
+# REC by hand: records, then keeps it as a loop; GLO undoes the newest layer
 tap REC
 wait 50
 expect loop 1
@@ -55,16 +55,18 @@ wait 400
 tap REC
 wait 50
 expect loop 2
-tap REC
-wait 50
 expect keep 1
 tapkey 12
-wait 100
+wait 300
 tap REC
 wait 50
-expect keep 0
 expect loop 2
 expect loopn 3
+expect tracks 3
+tap GLO
+wait 100
+expect tracks 1
+expect loopn 2
 # the controls: ALGORITHM picks the space, PRESETS walks every scene
 turn ALGO 2
 wait 50

@@ -1,5 +1,5 @@
 # the CHORDS screen's BUILD page: keys set a chord's root and a tap soon after goes on to the next, TYPE colours the
-# chord just tapped, K1 walks the chords and one past the last adds one, LENGTH left past 1/2x arms REMOVE for REC
+# chord just tapped, K1 walks the chords and one past the last adds one, GLO takes the ringed chord out
 wait 600
 expect view 0
 tap SEQ
@@ -43,9 +43,7 @@ tapkey 12
 wait 1500
 expect chordslot 2
 expect chordroot 5
-turn K4 -1
-turn K4 -1
-tap REC
+tap GLO
 wait 100
 expect built 3
 expect loop 0
@@ -60,6 +58,9 @@ turn SELECT -1
 wait 50
 expect page 10
 shot simple.png
+tap SEQ
+wait 50
+expect view 4
 tap SEQ
 wait 50
 expect view 0
@@ -79,10 +80,7 @@ wait 1500
 expect chordslot 1
 expect chordroot 2
 turn K1 -1
-turn K4 -1
-turn K4 -1
-turn K4 -1
-tap REC
+tap GLO
 wait 100
 expect built 3
 expect chordslot 0
