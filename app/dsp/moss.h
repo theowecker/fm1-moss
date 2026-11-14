@@ -49,9 +49,10 @@ void ms_sleep_fade(float level);       /* 0..1, applied over the master */
 void ms_panic(void);
 void ms_shed(void);                    /* the render ran late: drop a voice */
 void ms_seed(uint32_t s);
-/* i: 0 snap (FREE, SCALE, CHORD), 1 harmony 0..100, 2 voice (AUTO, EP, BELL, PAD, KALIMBA), 3 PLAY, LISTEN, HOLD (a tap plants a note that plays by itself) */
+/* i: 0 snap (FREE, SCALE, CHORD), 1 harmony 0..100, 2 voice (AUTO, then MS_VOICE_NAME), 3 PLAY, LISTEN, HOLD (a tap plants a note that plays by itself) */
 void ms_keys(int i, int v);
 void ms_loop(int clear);               /* 0: advance record, play, overdub, play; 1: clear */
+void ms_loop_voice(void);              /* every layer of the loop plays in VOICE's sound from now on */
 void ms_loop_keep(void);               /* REC: start recording, or keep what is playing and make what comes next a
                                           new layer */
 void ms_loop_set(int i, int v);        /* 0 fade, 1 mutate, 2 smear: 0..100; 3 speed 0..4 */
@@ -89,6 +90,7 @@ typedef struct {
     uint16_t len_ms;
     uint8_t n, mute, tempo, rsv[3];
     ms_slot_ev_t ev[MS_SLOT_EVENTS];
+    uint8_t kind[MS_NLAYERS];          /* each layer's voice, 1 + MS_KIND_NAME index, 0: whatever VOICE is now */
 } ms_slot_t;
 /* one transfer at a time through ms_slot_xfer: the UI waits for ms_vis.xfer_seq to change before the next */
 extern ms_slot_t ms_slot_xfer;
@@ -111,6 +113,9 @@ extern const char *const MS_KIT_NAME[MS_NKITS];
 extern const char *const MS_PATTERN_NAME[MS_NPATTERNS];
 extern const char *const MS_BASS_NAME[MS_NBASS];
 #define MS_NSPACES 13
+#define MS_NKINDS 9
+/* the sounds a note can have; the VOICE knob is AUTO then these */
+extern const char *const MS_KIND_NAME[MS_NKINDS];
 extern const char *const MS_SPACE_NAME[MS_NSPACES];
 extern const char *const MS_DIV_NAME[6];
 enum { MS_LOOP_EMPTY, MS_LOOP_REC, MS_LOOP_PLAY, MS_LOOP_DUB };
@@ -150,12 +155,14 @@ typedef struct {
     volatile int8_t lp_redo;           /* the layer armed for REDO, -1 none */
     volatile uint8_t lp_adding;        /* a phrase is going onto the playing loop as a new layer */
     volatile uint8_t lp_tracks, lp_mute, lp_track;   /* tracks holding notes and muted (bit each), the one recording */
+    volatile uint8_t lp_kind[MS_NLAYERS];   /* each layer's voice, MS_KIND_NAME index, 0xFF whatever VOICE is now */
     volatile uint32_t xfer_seq;
     volatile uint8_t lp_keep;          /* the loop is kept: it does not fade */
     volatile uint32_t lp_gen;          /* bumped when a new loop begins or one is loaded */        /* bumped when a snap or load is done */
     volatile uint8_t lp_state, lp_n;   /* MS_LOOP_*, notes held */
     volatile float lp_pos;             /* recording: seconds so far; playing: the playhead 0..1 */
     volatile float lp_len;             /* seconds */
+    volatile float evo_away;           /* EVOLVE's tide: 0 home, 1 as far out as it goes */
 } ms_vis_t;
 extern ms_vis_t ms_vis;
 

@@ -28,15 +28,15 @@ picks up what you play.
 | HOME | The HOME page |
 | SEL | The MIX page. Press again for the BEAT screen |
 | ENV | The KEYS page. Press again to change how the keys play (PLAY, LISTEN or HOLD) |
-| LFO | The LOOPS screen, on its LAYERS page. Press again for SHAPE, TAPE, then LIBRARY |
 | FX | The FX page. Press again for MOTION, then TEXTURE, then EVOLVE |
+| LFO | The next voice for the keys, from any screen. Hold it for a second to make every layer of the loop play in that voice |
 | GLO | Undo: takes out the newest layer, or what the page is on: SIMPLE goes back to the scene's own chords, BUILD removes the chord, DRUMS and BASS remove the steps (asking first), LAYERS the layer, LIBRARY the loop (asking first). Hold it: the screen says KEEP HOLDING TO CLEAR, and after a second the loop is cleared. Let go before then and nothing happens |
 | K1 to K4 | The four knobs of the page you are on |
 | REC | Keep: starts a recording, keeps what you just played as a layer of the loop and stops the loop from fading. See [Looping](#looping) |
 | ARP | Freeze: the reverb holds what it has and new sound plays dry over it. In SCAPES and DRIFT the chord also stops changing. Press again to let go |
 | PLAY | Start or stop the music. The screen says RESTING while it is stopped. Your loop keeps going |
 | EDIT | A new variation: new chords, new bell patterns in DRIFT, new weather in SCAPES. Your loop is not touched |
-| SEQ | The next screen: PICTURE, STUDIO, LOOPS, CHORDS, BEAT |
+| SEQ | The next screen: PICTURE, STUDIO, LOOPS, CHORDS, BEAT. The LOOPS, CHORDS and BEAT screens open on the page you last left them on |
 | SAVE | Save your settings and your loop library (it lights while something isn't saved; with nothing playing, MOSS-1 saves by itself). Hold for two seconds and let go to reset the scene. Hold for six to reset everything (your saved loops stay) |
 | OCT- and OCT+ | Move the keys down or up an octave, from -2 to +2 |
 | MASTER | Volume |
@@ -135,13 +135,15 @@ Effects on the whole mix, for when the sound wants more character. All four star
 
 The music changes by itself over minutes, so a scene left on for an hour is never quite the same. Each time you
 pick a scene it also starts a little differently: the sound a little off from your settings, and maybe on another
-chord of its path. It is on from the start, gently: AMOUNT 30, PACE 40, CHORDS 30, FILLS 30. Set AMOUNT, CHORDS and FILLS to 0 (they show OFF) and every
+chord of its path. It doesn't only wander off. Every few minutes it drifts back home, where the knobs, chords and
+melody are the scene's own again and the melody plays the same each time round. Then it slowly moves away again.
+It is on from the start, gently: AMOUNT 30, PACE 40, CHORDS 30, FILLS 30. Set AMOUNT, CHORDS and FILLS to 0 (they show OFF) and every
 scene plays just as it is set.
 
 | Knob | What it does |
 | --- | --- |
-| AMOUNT | How far the HOME knobs and the MIX levels wander, now and then, around where you set them, gliding over ten seconds or so, and how far from them a scene starts. Your settings stay as they are; only the sound moves. A MIX level at 0 stays off |
-| PACE | How often: every few minutes at 0, every half minute or so at 100 |
+| AMOUNT | How far the HOME knobs and the MIX levels wander, now and then, around where you set them, gliding over ten seconds or so, and how far from them a scene starts. Your settings stay as they are; only the sound moves. A MIX level at 0 stays off. It is also how far the melody strays from its tune when away from home. At 0 there is no tune to come back to and every note is new |
+| PACE | How often: every few minutes at 0, every half minute or so at 100. It also sets how long the trip away and back home takes, about ten minutes at 0 and three at 100 |
 | CHORDS | The chance a scene starts on another chord of its path, that its own progression now and then takes a neighbouring chord and that now and then it plays a round of another progression (CIRCLE, DREAM, MOODY or SONG) before coming back. Your TAPPED and BUILT progressions, and a held CHORD, are left alone |
 | FILLS | How much the drums get busier and calmer over time: more ghost notes and fills, then fewer. Your own pattern on DRUMS plays as you set it |
 
@@ -153,7 +155,7 @@ scene plays just as it is set.
 | --- | --- |
 | SNAP | FREE plays the note you press. SCALE moves it to the nearest note in the key. CHORD moves it to the nearest note of the chord playing now |
 | HARMONY | Adds softer chord notes under each note you play |
-| VOICE | The sound of the keys. AUTO uses the mode's own sound |
+| VOICE | The sound of the keys: AUTO (the mode's own), EP, BELL, PAD, KALIMBA, CHIME, GLASS, MARIMBA, PLUCK or FLUTE. Each loop layer keeps the sound it was played in, so you can play one layer in BELL, switch to FLUTE and play the next over it. LFO steps through the voices from any screen |
 | TAP | How the keys play: PLAY, LISTEN or HOLD. Pressing ENV again on this page does the same |
 
 In short: **PLAY** plays. **LISTEN** plays, loops and steers the music. **HOLD** plants notes that play themselves.
@@ -186,7 +188,7 @@ In HOLD the keys don't loop, so REC has nothing to record.
 
 ### The LOOPS screen
 
-LFO opens it, or press SEQ until it shows. It has the four loop pages and nothing else: turn SELECT to go through
+Press SEQ until it shows. It has the four loop pages and nothing else: turn SELECT to go through
 LAYERS, SHAPE, TAPE and LIBRARY, and the tabs at the top show where you are. HOME, SEL, ENV and FX open their page
 on the screen you came from.
 
@@ -200,8 +202,8 @@ Under the tabs, the looper says what it is doing and what to do next:
 - **FADING** or **KEPT**: the loop is playing. The line under it switches between tips.
 
 The lanes are the layers, the dots are their notes and the line is the playhead. A mark on the left shows which
-layers hold notes. On LAYERS, the layer K1 has picked is highlighted, with its number on the right and OFF or EMPTY
-when that applies. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
+layers hold notes. On LAYERS, the layer K1 has picked is highlighted, with its number and sound on the right, or OFF or
+EMPTY when that applies. TAPE shows on the lanes too: WARBLE bends them and AGE browns the notes.
 
 **One loop, then another**: play a phrase, let it loop, keep it if you like. When you want something new, hold GLO.
 The old loop stays in the library and the next thing you play starts a new one.
@@ -209,7 +211,7 @@ The old loop stays in the library and the next thing you play starts a new one.
 **Redo one layer**: on LAYERS, pick it with LAYER and press GLO. It's gone, and the next thing you play is a new
 layer (with TAP on PLAY: REC, play, REC).
 
-### LAYERS (LFO)
+### LAYERS
 
 ![](img/loop-page.png)
 
@@ -217,7 +219,7 @@ A loop holds up to eight layers. This page works on one at a time.
 
 | Knob | What it does |
 | --- | --- |
-| LAYER | Picks the layer, 1 to 8. Its lane is marked and its number shows on the right |
+| LAYER | Picks the layer, 1 to 8. Its lane is marked and its number and sound show on the right |
 | LEVEL | That layer's level. All the way down is OFF, which mutes it |
 | MUTE | Right mutes that layer, left brings it back. It stays in the loop |
 | SHIFT | Moves that layer a sixteenth later (right) or earlier (left) for each click |
@@ -225,7 +227,7 @@ A loop holds up to eight layers. This page works on one at a time.
 On this page GLO takes out the layer you picked. A new layer always starts at the same level, whatever the layer
 before it in that place was set to. When all eight are used, new notes go on layer 8.
 
-### SHAPE (LFO again)
+### SHAPE
 
 | Knob | What it does |
 | --- | --- |
@@ -234,7 +236,7 @@ before it in that place was set to. When all eight are used, new notes go on lay
 | SHIFT | Slide the whole loop a sixteenth later (right) or earlier (left) for each click |
 | SPEED | 1/2, 1x, 2x, REV, REV 1/2 |
 
-### TAPE (LFO a third time)
+### TAPE
 
 The loop's own tape. These change only the loop, not the rest of the music.
 
@@ -245,7 +247,7 @@ The loop's own tape. These change only the loop, not the rest of the music.
 | AGE | A copy of a copy: darker, thinner, narrower and a little quieter |
 | SMEAR | Backwards swells under your notes, and softer, slower repeats |
 
-### LIBRARY (LFO a fourth time)
+### LIBRARY
 
 Your last eight loops, kept for you. The LOOPS screen lists them, newest first, with > by the one playing.
 
@@ -265,8 +267,7 @@ show where you are. On each, the keys do something different:
 - **BUILD** makes a progression of any chords at all. The keys set each chord's root.
 - **PLAY** plays chords live. Each key plays a whole chord.
 
-HOME, SEL, ENV and FX open their page on the screen you came from, and LFO opens the loops. SEQ comes back to the
-CHORDS page you left.
+HOME, SEL, ENV and FX open their page on the screen you came from. SEQ comes back to the CHORDS page you left.
 
 ### SIMPLE
 

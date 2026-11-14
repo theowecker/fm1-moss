@@ -15,7 +15,7 @@ licence = "MPL-2.0"
 credits = "Built on fm1-base and felucca-bsp, from Felucca by Leo Kuroshita (Hügelton Instruments)."
 # firmware.json, for firmware hubs (fm1-base docs/FIRMWARE-JSON.md)
 author = "Theo Wecker"
-description = "Ambient firmware with three modes. LOFI plays electric piano over a slow beat with tape wobble and crackle. SCAPES plays nature sounds (forest, rain, shore, night, storm, campfire, creek) with a quiet pad. DRIFT plays pads and bells on loops of different lengths. Play and the music follows you, into an eight layer looper. Build chord progressions or play whole chords live, program your own drums and a bass line that follows the chords, and let scenes slowly evolve. Thirteen spaces, a sleep timer and pixel art for every scene."
+description = "Ambient firmware with three modes. LOFI plays electric piano over a slow beat with tape wobble and crackle. SCAPES plays nature sounds (forest, rain, shore, night, storm, campfire, creek) with a quiet pad. DRIFT plays pads and bells on loops of different lengths. Play and the music follows you, into an eight layer looper where each layer keeps its own voice. Build chord progressions or play whole chords live, program your own drums and a bass line that follows the chords, and let scenes slowly evolve. Thirteen spaces, a sleep timer and pixel art for every scene."
 tags = ["ambient", "generative", "chords"]
 install = "https://theowecker.github.io/fm1-moss/install/"
 site = "https://theowecker.github.io/fm1-moss/"

@@ -30,8 +30,12 @@ wait 300
 tapkey 12
 wait 3000
 expect tracks 3
-# LFO opens the LOOPS screen on LAYERS: a layer turned all the way down is silenced
-tap LFO
+# the LOOPS screen opens on LAYERS: a layer turned all the way down is silenced
+tap SEQ
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
 turn K2 -40
 wait 200
 expect view 2
@@ -74,7 +78,10 @@ wait 50
 expect space 2
 turn PRESET 1
 wait 1500
-tap LFO
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
 wait 100
 shot loop-page.png
 tap FX
@@ -85,7 +92,8 @@ wait 100
 shot keys-page.png
 tap SEQ
 wait 100
-tap LFO
+wait 50
+expect view 2
 wait 100
 shot s-loop-page.png
 tap FX

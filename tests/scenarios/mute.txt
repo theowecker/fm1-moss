@@ -5,8 +5,11 @@ wait 300
 tapkey 11
 wait 3000
 expect loop 2
-tap LFO
-tap LFO
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+turn SELECT 1
 wait 50
 expect page 8
 expect dots0 >0

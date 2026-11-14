@@ -72,7 +72,8 @@ uint16_t ms_scale_mask(int mood, int root)
     return m;
 }
 
-enum { V_EP, V_PAD, V_BELL, V_SOFTBELL, V_KALIMBA };
+enum { V_EP, V_PAD, V_BELL, V_SOFTBELL, V_KALIMBA, V_GLASS, V_MARIMBA, V_PLUCK, V_FLUTE };
+const char *const MS_KIND_NAME[MS_NKINDS] = {"EP", "PAD", "BELL", "CHIME", "KALIMBA", "GLASS", "MARIMBA", "PLUCK", "FLUTE"};
 enum { BIRD_NONE, BIRD_SONG, BIRD_GULL, BIRD_OWL };
 enum { SNARE_FULL, SNARE_RIM };
 #define B(n) (1u << (n))
@@ -256,7 +257,7 @@ static struct {
 } st;
 
 enum { SNAP_FREE, SNAP_SCALE, SNAP_CHORD };
-enum { KV_AUTO, KV_EP, KV_BELL, KV_PAD, KV_KALIMBA };
+enum { KV_AUTO };
 static struct {
     int snap, voice, listen, hold;
     int8_t seed[8];                    /* HOLD: the notes planted, -1 none */
@@ -334,7 +335,8 @@ static const int8_t PATHS[5][4] = {
     {0, 3, 0, 3},                      /* DRONE: I IV */
 };
 /* EVOLVE: over minutes the HOME knobs wander a little around where they are set, the scene's chords now and then
- * take a neighbour, a scene starts on a chord of its path picked by chance, and the beat gets busier and calmer */
+ * take a neighbour, a scene starts on a chord of its path picked by chance, and the beat gets busier and calmer.
+ * All of it rides a slow tide: out, then back home, where the scene and its melody are as they began, then out again */
 static struct {
     float amount, pace, chords, beat;
     float off[MS_NMACRO], target[MS_NMACRO];   /* knob points added to the HOME knobs, and where each is heading */
@@ -343,7 +345,25 @@ static struct {
     float t, apply_t;                  /* seconds to the next new target, and to the next apply */
     float busy, busy_target;
     int alt;                           /* a round of another progression in place of the scene's own: 1 + PATHS, 0 none */
-} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, {0}, {0}, 20.0f, 0.0f, 0.0f, 0.0f, 0};
+    float tide, away;                  /* the tide's phase 0..1 (0 home), and how far out it is now 0..1 */
+    float vary;                        /* the share of melody notes drawn fresh rather than from the theme */
+    uint32_t theme_seed, theme;        /* the melody's own random numbers, replayed from the seed each round */
+    int held_n;                        /* chords counted while the path stands still, for its rounds */
+} evo = {0.3f, 0.4f, 0.3f, 0.3f, {0}, {0}, {0}, {0}, {0}, 20.0f, 0.0f, 0.0f, 0.0f, 0, 0.5f, 1.0f, 1.0f, 1u, 1u, 0};
+
+/* a melody draw: from the theme near home, so a round's notes come back as they were, fresh further out.
+ * Both are always drawn, so the theme keeps its place whichever is used */
+static float mel_rand(void)
+{
+    float r;
+    evo.theme ^= evo.theme << 13;
+    evo.theme ^= evo.theme >> 17;
+    evo.theme ^= evo.theme << 5;
+    r = (float)(evo.theme >> 8) * (1.0f / 16777216.0f);
+    return frand() < evo.vary ? frand() : r;
+}
+static int mel_irand(int n) { int i = (int)(mel_rand() * (float)n); return i < n ? i : n - 1; }
+static void theme_round(void);
 
 static const float RATE_MUL[4] = {0.0f, 2.0f, 1.0f, 0.5f};   /* times the scene's chord length; 0: never by itself */
 
@@ -470,14 +490,21 @@ static int chord_next(const int8_t *prog, int peek)
     static const int8_t MOVE[] = {3, 4, -3, 2, 5, -2, 3, 4};   /* mostly fourths and fifths, sometimes thirds */
     int i = hc.path == PATH_MINE ? (hm.prog_i + 1) % hc.mine_n
           : hc.path == PATH_BUILT ? (hm.prog_i + 1) % hc.b_n : (hm.prog_i + 1) & 3;
+    if (!peek && (hc.lock >= 0 || hm.pending >= 0 || !hc.rate)) {
+        if (!(evo.held_n = (evo.held_n + 1) & 3))   /* a path standing still: its rounds are four chords */
+            theme_round();
+    }
     if (hc.lock >= 0)
         return hc.lock;
     if (!peek && hm.pending >= 0)
         return hm.pending;
     if (!hc.rate)                        /* STILL: the chord comes round again unchanged */
         return chord_id();
-    if (!peek)
+    if (!peek) {
         hm.prog_i = i;
+        if (!i)
+            theme_round();
+    }
     if (hc.path == PATH_BUILT)
         return CH_BUILT + i;
     if (hc.path == PATH_MINE)
@@ -485,10 +512,10 @@ static int chord_next(const int8_t *prog, int peek)
     if (hc.path > 0)
         return PATHS[hc.path - 1][i];
     if (prog && !peek && i == 0)         /* EVOLVE: at the top of a round, now and then a round of another path */
-        evo.alt = frand() < 0.3f * evo.chords ? 1 + irand(4) : 0;
+        evo.alt = frand() < 0.3f * evo.chords * evo.away ? 1 + irand(4) : 0;
     if (prog && evo.alt)
         return PATHS[evo.alt - 1][i];
-    if (prog && !peek && frand() < 0.25f * evo.chords)   /* and now and then a neighbour sharing two notes */
+    if (prog && !peek && frand() < 0.25f * evo.chords * evo.away)   /* and now and then a neighbour sharing two notes */
         return (prog[i] + (frand() < 0.5f ? 2 : 5)) % 7;
     return prog ? prog[i] : hm.degree + MOVE[irand(8)];
 }
@@ -715,6 +742,54 @@ static voice_t *voice_start(int kind, int note, float vel, int layer, int32_t ga
         v->lp_a = onepole_a(5000.0f);
         v->rev = 0.5f;
         v->echo = 0.35f;
+        break;
+    case V_GLASS:                        /* a 5:1 shimmer that barely fades, soft and high */
+        v->im = v->ic * 5.0f;
+        v->idx = 0.04f + 0.06f * vel;
+        v->idx_floor = 0.015f;
+        v->idx_mul = decay_mul(2.5f);
+        v->s_lvl = 0.0f;
+        v->d_mul = decay_mul(5.5f);
+        v->amp = 0.11f * (0.4f + 0.6f * vel);
+        v->lp_a = onepole_a(9000.0f);
+        v->rev = 0.85f;
+        v->echo = 0.45f;
+        break;
+    case V_MARIMBA:                      /* the 4:1 knock of wood, gone in a moment */
+        v->im = v->ic * 4.0f;
+        v->idx = 0.1f + 0.2f * vel;
+        v->idx_floor = 0.0f;
+        v->idx_mul = decay_mul(0.06f);
+        v->s_lvl = 0.0f;
+        v->d_mul = decay_mul(0.9f);
+        v->amp = 0.18f * (0.35f + 0.65f * vel);
+        v->lp_a = onepole_a(4000.0f);
+        v->rev = 0.4f;
+        v->echo = 0.3f;
+        break;
+    case V_PLUCK:                        /* a bright edge that dulls fast, like a harp */
+        v->im = v->ic;
+        v->idx = 0.25f + 0.25f * vel;
+        v->idx_floor = 0.0f;
+        v->idx_mul = decay_mul(0.12f);
+        v->s_lvl = 0.0f;
+        v->d_mul = decay_mul(1.0f);
+        v->amp = 0.17f * (0.35f + 0.65f * vel);
+        v->lp_a = onepole_a(3000.0f + 3000.0f * vel);
+        v->rev = 0.45f;
+        v->echo = 0.35f;
+        break;
+    case V_FLUTE:                        /* held: a breath of brightness at the start, then a near sine */
+        v->im = v->ic;
+        v->idx = 0.12f + 0.08f * vel;
+        v->idx_floor = 0.04f;
+        v->idx_mul = decay_mul(0.3f);
+        v->s_lvl = 0.75f;
+        v->d_mul = decay_mul(0.5f);
+        v->amp = 0.12f * (0.5f + 0.5f * vel);
+        v->lp_a = onepole_a(3200.0f);
+        v->rev = 0.6f;
+        v->echo = 0.3f;
         break;
     }
     ms_vis.recent[(ms_vis.notes + 1u) & 15u] = (uint16_t)(note | layer << 8);
@@ -1700,8 +1775,8 @@ static void lofi_step(void)
         next_root = (st.root + chord_root_semis(nd)) % 12;
         bass_note(36 + ((next_root + 11) % 12), 0.6f, (int32_t)(sixteenth * 1.6f), 0.0f, 0.004f);
     }
-    if ((s & 1u) == 0 && s != 0 && frand() < ls->mel * (1.0f + 3.0f * kb.energy)) {
-        int deg = seq.mel_last + irand(5) - 2;
+    if ((s & 1u) == 0 && s != 0 && mel_rand() < ls->mel * (1.0f + 3.0f * kb.energy)) {
+        int deg = seq.mel_last + mel_irand(5) - 2;
         if (deg < 7)
             deg += 2;
         if (deg > 13)
@@ -1715,8 +1790,8 @@ static void lofi_step(void)
             while (n > 84)
                 n -= 12;
         }
-        ev_add(hum, EV_NOTE, ls->mel_kind, n, 0.4f + 0.25f * frand(), 0, (int32_t)(sixteenth * 3.0f), 0.4f * frand2());
-        if (frand() < 0.35f)
+        ev_add(hum, EV_NOTE, ls->mel_kind, n, 0.4f + 0.25f * mel_rand(), 0, (int32_t)(sixteenth * 3.0f), 0.4f * frand2());
+        if (mel_rand() < 0.35f)
             ev_add(hum + (int32_t)(sixteenth * 2.0f * (1.0f - LOFI_STYLE[st.scene].swing)), EV_NOTE, ls->mel_kind,
                    scale_note_near(deg - 1, 76), 0.35f, 0, (int32_t)(sixteenth * 2.0f), 0.4f * frand2());
     }
@@ -1738,24 +1813,27 @@ static void scapes_next_chord(void)
     chord_set(chord_next(ss->prog, 0));
     hm.pending = -1;
     pad_chord(4, 4.0f, 7.0f);
-    seq.chord_t = chord_wait(ss->chord_secs * (0.8f + 0.4f * frand()));
+    seq.chord_t = chord_wait(ss->chord_secs * (0.8f + 0.4f * mel_rand()));
 }
+
+static float scapes_gap(void) { return 60.0f / k.note_rate * (0.4f + 1.2f * mel_rand()) / (1.0f + 2.0f * kb.energy); }
 
 static void scapes_note(void)
 {
     const scape_style_t *ss = &SCAPE_STYLE[st.scene];
     /* pentatonic-leaning: chord tones plus the 2nd and 6th */
     static const int8_t PICK[] = {0, 2, 4, 1, 5, 7, 9, 11};
-    int n = scale_note_near(PICK[irand(8)] + hm.degree, 72 + irand(10)), i, phrase = frand() < 0.3f ? 2 + irand(2) : 1;
+    int n = scale_note_near(PICK[mel_irand(8)] + hm.degree, 72 + mel_irand(10)), i, phrase = mel_rand() < 0.3f ? 2 + mel_irand(2) : 1;
     for (i = 0; i < phrase; i++)
-        ev_add((int32_t)((float)i * (0.25f + 0.2f * frand()) * MS_SR), EV_NOTE, ss->note_kind,
-               i ? scale_note_near(PICK[irand(8)] + hm.degree, n) : n, 0.35f + 0.35f * frand(), 3,
+        ev_add((int32_t)((float)i * (0.25f + 0.2f * mel_rand()) * MS_SR), EV_NOTE, ss->note_kind,
+               i ? scale_note_near(PICK[mel_irand(8)] + hm.degree, n) : n, 0.35f + 0.35f * mel_rand(), 3,
                (int32_t)(1.2f * MS_SR), 0.7f * frand2());
 }
 
 #define NLOOP 4
 static struct {
     int8_t deg[NLOOP][32];             /* scale degree above the root, -1 rest */
+    int8_t home[NLOOP][32];            /* the loops as the scene began, where EVOLVE's tide brings them back */
     uint8_t len[NLOOP];
     uint32_t pos[NLOOP];
     float pan[NLOOP];
@@ -1783,16 +1861,34 @@ static uint32_t loop_mask(int i)
     return m;
 }
 
+/* one of the loop's notes that has wandered goes back to where it began */
+static void drift_restore(int i)
+{
+    int j, n = 0, pick;
+    for (j = 0; j < dg.len[i]; j++)
+        n += dg.deg[i][j] != dg.home[i][j];
+    if (!n)
+        return;
+    pick = irand(n);
+    for (j = 0; j < dg.len[i]; j++)
+        if (dg.deg[i][j] != dg.home[i][j] && !pick--) {
+            dg.deg[i][j] = dg.home[i][j];
+            return;
+        }
+}
+
 static void drift_regrow(void)
 {
     const drift_style_t *ds = &DRIFT_STYLE[st.scene];
     static const float CYC[4] = {17.0f, 21.5f, 26.0f, 31.5f};
-    int i;
+    int i, j;
     for (i = 0; i < NLOOP; i++) {
         dg.len[i] = ds->loop_len[i];
         dg.pos[i] = (uint32_t)irand(dg.len[i]);
         dg.pan[i] = (float)i * 0.5f - 0.75f;
         drift_fill_loop(i);
+        for (j = 0; j < 32; j++)
+            dg.home[i][j] = dg.deg[i][j];
         ms_vis.loop_len[i] = dg.len[i];
         ms_vis.loop_notes[i] = loop_mask(i);
     }
@@ -1836,7 +1932,9 @@ static void drift_step(void)   /* every quarter note */
         dg.pos[i] = (dg.pos[i] + 1) % dg.len[i];
         if (dg.pos[i] == 0 && frand() < 0.15f + 0.6f * k.drift) {   /* mutate as the loop wraps */
             int j = irand(dg.len[i]);
-            if (dg.deg[i][j] >= 0 && frand() < 0.5f)
+            if (frand() >= evo.vary)     /* near home: a note goes back to how it began */
+                drift_restore(i);
+            else if (dg.deg[i][j] >= 0 && frand() < 0.5f)
                 dg.deg[i][j] = -1;
             else
                 dg.deg[i][irand(dg.len[i])] = (int8_t)(7 + i * 2 + irand(7));
@@ -2055,6 +2153,19 @@ static void evolve_start(void)
         evo.moff[i] = evo.mtarget[i] = frand2() * 35.0f * evo.amount;
     evo.t = (20.0f + 140.0f * (1.0f - evo.pace)) * frand();
     evo.alt = 0;
+    evo.tide = 0.15f + 0.7f * frand();   /* out somewhere: home comes round later */
+    evo.theme_seed = rnd() | 1u;
+    evo.theme = evo.theme_seed;
+    evo.held_n = 0;
+}
+
+/* the top of a round: the melody starts its theme again */
+static void theme_round(void)
+{
+    evo.theme = evo.theme_seed;
+    seq.mel_last = 9;
+    if (st.mode == MODE_SCAPES && k.note_rate > 0.0f)
+        seq.note_acc = scapes_gap();
 }
 
 static void mode_start(void)
@@ -2120,6 +2231,7 @@ static void mode_start(void)
 
 static void new_variation(void)
 {
+    evo.theme_seed = rnd() | 1u;         /* a new melody to come home to */
     switch (st.mode) {
     case MODE_LOFI:
         hm.prog_i = irand(4) - 1;
@@ -2173,9 +2285,10 @@ HOT float shimmer_tick(float in)
 
 static int key_kind(void)
 {
-    static const uint8_t KIND[] = {V_EP, V_EP, V_BELL, V_PAD, V_KALIMBA};
+    /* the knob's order: the first four as they always were, then the ones added later */
+    static const uint8_t KIND[MS_NKINDS] = {V_EP, V_BELL, V_PAD, V_KALIMBA, V_SOFTBELL, V_GLASS, V_MARIMBA, V_PLUCK, V_FLUTE};
     if (kb.voice != KV_AUTO)
-        return KIND[clamp(kb.voice, 0, 4)];
+        return KIND[clamp(kb.voice - 1, 0, MS_NKINDS - 1)];
     return st.mode == MODE_LOFI ? V_EP : st.mode == MODE_SCAPES ? SCAPE_STYLE[st.scene].note_kind : DRIFT_STYLE[st.scene].bell_kind;
 }
 
@@ -2208,11 +2321,17 @@ static int scale_step(int note, int dir)
     return note;
 }
 
-/* snaps the note and adds chord tones below it per HARMONY; out: the notes that sound */
-static void key_sound(int8_t out[3], int note, float vel, int layer, int32_t gate, float bloom)
+static float kind_atk(int kind) { return kind == V_PAD ? 0.25f : kind == V_FLUTE ? 0.08f : kind == V_GLASS ? 0.02f : 0.004f; }
+static float kind_rel(int kind)
 {
-    int kind = key_kind(), n = clamp(snap_note(note), 24, 108), i, h = n;
-    float atk = (kind == V_PAD ? 0.25f : 0.004f) + bloom, rel = kind == V_EP ? 0.3f : kind == V_PAD ? 2.5f : 1.5f;
+    return kind == V_EP ? 0.3f : kind == V_PAD ? 2.5f : kind == V_FLUTE || kind == V_MARIMBA ? 0.6f : kind == V_PLUCK ? 0.8f : 1.5f;
+}
+
+/* snaps the note and adds chord tones below it per HARMONY; out: the notes that sound */
+static void key_sound(int8_t out[3], int kind, int note, float vel, int layer, int32_t gate, float bloom)
+{
+    int n = clamp(snap_note(note), 24, 108), i, h = n;
+    float atk = kind_atk(kind) + bloom, rel = kind_rel(kind);
     voice_t *v = voice_start(kind, n, vel, layer, gate, atk, rel, 0.0f);
     v->rev = fm_minf(v->rev + bloom, 1.0f);
     out[0] = (int8_t)n;
@@ -2237,7 +2356,9 @@ typedef struct {
     float t, dur, vel;
     int8_t note, open;
     uint8_t track;
+    uint8_t kind;                        /* the voice it was played in, so a layer keeps it when VOICE changes */
 } lev_t;
+#define KIND_NOW 0xFFu                   /* a loop saved before layers kept their voice: it plays in VOICE's */
 static struct {
     int state, n, speed;
     lev_t ev[NLEV];
@@ -2339,6 +2460,7 @@ static void loop_add(int note, float vel)
     e->note = (int8_t)note;
     e->open = 1;
     e->track = (uint8_t)lp.track;
+    e->kind = (uint8_t)key_kind();
 }
 
 static void loop_close(int note)
@@ -2442,21 +2564,38 @@ static void loop_pass(void)
         lp.state = LP_EMPTY;
 }
 
+/* the voice a layer's first note was played in, KIND_NOW when it has none of its own */
+static int layer_kind(int t)
+{
+    int i;
+    for (i = 0; i < lp.n; i++)
+        if (lp.ev[i].track == t)
+            return lp.ev[i].kind;
+    return KIND_NOW;
+}
+
 /* each track's notes as 32 time bins, for the screen */
 static void loop_vis(void)
 {
     uint32_t dots[MS_NLAYERS] = {0}, used = 0;
+    uint8_t kind[MS_NLAYERS];
     int i;
+    for (i = 0; i < MS_NLAYERS; i++)
+        kind[i] = KIND_NOW;
     for (i = 0; i < lp.n; i++) {
         float len = lp.state == LP_REC ? lp.pos : lp.len;
         int b = len > 0.0f ? (int)(lp.ev[i].t / len * 32.0f) : 0;
+        if (!(used >> (lp.ev[i].track % MS_NLAYERS) & 1u))
+            kind[lp.ev[i].track % MS_NLAYERS] = lp.ev[i].kind;
         dots[lp.ev[i].track % MS_NLAYERS] |= 1u << clamp(b, 0, 31);
         used |= 1u << (lp.ev[i].track % MS_NLAYERS);
     }
     if (lp.state == LP_EMPTY)
         lp.redo = -1;
-    for (i = 0; i < MS_NLAYERS; i++)
+    for (i = 0; i < MS_NLAYERS; i++) {
         ms_vis.lp_dots[i] = dots[i];
+        ms_vis.lp_kind[i] = kind[i];
+    }
     ms_vis.lp_redo = (int8_t)lp.redo;
     ms_vis.lp_tracks = (uint8_t)used;
     ms_vis.lp_mute = (uint8_t)lp.mute;
@@ -2475,6 +2614,10 @@ static void loop_snap(void)
     o->mute = (uint8_t)lp.mute;
     o->tempo = (uint8_t)st.tempo;
     o->rsv[0] = MS_SLOT_FORMAT;
+    for (i = 0; i < MS_NLAYERS; i++) {
+        int kd = layer_kind(i);
+        o->kind[i] = (uint8_t)(kd == (int)KIND_NOW ? 0 : 1 + kd);
+    }
     if (lp.state != LP_PLAY && lp.state != LP_DUB)
         return;
     for (i = 0; i < lp.n; i++) {         /* by velocity, loudest first: the ones that fit are kept */
@@ -2509,6 +2652,7 @@ static void loop_load(void)
         e->note = (int8_t)clamp(o->ev[i].note, 0, 127);
         e->vel = (float)(o->ev[i].vt >> 3) / 31.0f;
         e->track = o->ev[i].vt & 7u;
+        e->kind = o->kind[e->track] && o->kind[e->track] <= MS_NKINDS ? (uint8_t)(o->kind[e->track] - 1) : KIND_NOW;
         e->open = 0;
     }
     lp.n = n;
@@ -2574,7 +2718,7 @@ static void loop_tick(void)
         if (on < 0.0f)
             on = 0.0f;
         if (lp.tgain[e->track] > 0.01f && crossed(on, lp.u, u1, lp.len))
-            key_sound(out, e->note, e->vel * lp.tgain[e->track], SRC_LOOP, (int32_t)(fm_maxf(e->dur, 0.08f * MS_SR) / rate), lp.smear * 0.9f);
+            key_sound(out, e->kind == KIND_NOW ? key_kind() : e->kind, e->note, e->vel * lp.tgain[e->track], SRC_LOOP, (int32_t)(fm_maxf(e->dur, 0.08f * MS_SR) / rate), lp.smear * 0.9f);
     }
     if (u1 >= lp.len) {
         lp.u = u1 - lp.len;
@@ -2816,7 +2960,7 @@ void ms_note_now(int note, int vel)
     }
     lp.quiet = 0.0f;
     if (vel) {
-        key_sound(h, note, (float)vel / 127.0f, SRC_KEYS, -1, 0.0f);
+        key_sound(h, key_kind(), note, (float)vel / 127.0f, SRC_KEYS, -1, 0.0f);
         if (kb.listen && lp.state == LP_EMPTY)
             loop_tap();
         if (kb.listen && lp.state == LP_REC)   /* LISTEN: once you play, a pause closes it, REC-started or not */
@@ -2936,7 +3080,7 @@ static void live_release(int s)
 static void live_start_note(int s)
 {
     int i = cp.started[s]++, kind = key_kind();
-    float atk = kind == V_PAD ? 0.25f : 0.004f, rel = kind == V_EP ? 0.4f : kind == V_PAD ? 2.5f : 1.5f;
+    float atk = kind_atk(kind), rel = kind == V_EP ? 0.4f : kind_rel(kind);
     float vel = cp.vel[s] * (i ? 0.7f : 0.85f);
     voice_start(kind, cp.note[s][i], vel, SRC_KEYS, -1, atk, rel, (float)i / (float)cp.n[s] * 1.0f - 0.5f);
     if (loop_listening())
@@ -2994,6 +3138,13 @@ static void evolve_tick(float dt)
 {
     int i;
     float rate = dt / (15.0f + 60.0f * (1.0f - evo.pace));   /* how fast the knobs ease to their targets */
+    float out;
+    evo.tide += dt / (180.0f + 420.0f * (1.0f - evo.pace));   /* a round trip of 3 to 10 minutes */
+    evo.tide -= fm_floorf(evo.tide);
+    out = 0.5f - 0.5f * sin_t(wrap1(evo.tide + 0.25f));
+    evo.away = fm_clampf((out - 0.12f) / 0.88f, 0.0f, 1.0f);   /* a while at home, not a touch and gone */
+    evo.vary = evo.amount > 0.0f ? evo.away * fm_minf(0.5f + 2.0f * evo.amount, 1.0f) : 1.0f;
+    ms_vis.evo_away = evo.away;
     if ((evo.t -= dt) <= 0.0f) {         /* now and then one HOME knob and one MIX level get somewhere new to go */
         evo.t = (20.0f + 100.0f * (1.0f - evo.pace)) * (0.5f + frand());
         evo.target[irand(MS_NMACRO)] = frand2() * 40.0f * evo.amount;
@@ -3002,10 +3153,10 @@ static void evolve_tick(float dt)
         evo.busy_target = frand() * 0.6f * evo.beat;
     }
     for (i = 0; i < MS_NMACRO; i++)
-        evo.off[i] += (evo.target[i] * (evo.amount > 0.0f) - evo.off[i]) * fm_minf(rate * 4.0f, 1.0f);
+        evo.off[i] += (evo.target[i] * evo.away * (evo.amount > 0.0f) - evo.off[i]) * fm_minf(rate * 4.0f, 1.0f);
     for (i = 0; i < MS_NMIX; i++)
-        evo.moff[i] += (evo.mtarget[i] * (evo.amount > 0.0f) - evo.moff[i]) * fm_minf(rate * 4.0f, 1.0f);
-    evo.busy += (evo.busy_target * (evo.beat > 0.0f) - evo.busy) * fm_minf(rate * 4.0f, 1.0f);
+        evo.moff[i] += (evo.mtarget[i] * evo.away * (evo.amount > 0.0f) - evo.moff[i]) * fm_minf(rate * 4.0f, 1.0f);
+    evo.busy += (evo.busy_target * evo.away * (evo.beat > 0.0f) - evo.busy) * fm_minf(rate * 4.0f, 1.0f);
     if ((evo.apply_t -= dt) <= 0.0f) {   /* the knobs' sound follows once a second, if they moved: apply() is not free */
         int moved = 0;
         evo.apply_t = 1.0f;
@@ -3169,7 +3320,7 @@ static void drain(void)
             else if (c.a == 1)
                 kb.harmony = u(clamp(c.b, 0, 100));
             else if (c.a == 2)
-                kb.voice = clamp(c.b, 0, 4);
+                kb.voice = clamp(c.b, 0, MS_NKINDS);
             else {
                 kb.listen = c.b == 1;
                 if (!kb.hold && c.b == 2)
@@ -3267,6 +3418,10 @@ static void drain(void)
                     lp.split = 1;
                     lp.quiet = 3.0f * MS_SR;   /* the next note starts a new layer, as after a pause */
                 }
+            } else if (c.a == 3) {       /* every layer in the voice VOICE has now */
+                int i, kd = key_kind();
+                for (i = 0; i < lp.n; i++)
+                    lp.ev[i].kind = (uint8_t)kd;
             } else if (c.a) {
                 lp.state = LP_EMPTY;
                 lp.n = 0;
@@ -3651,7 +3806,7 @@ static void control(void)
             seq.note_acc -= dt;
             if (seq.note_acc <= 0.0f) {
                 scapes_note();
-                seq.note_acc = 60.0f / k.note_rate * (0.4f + 1.2f * frand()) / (1.0f + 2.0f * kb.energy);
+                seq.note_acc = scapes_gap();
             }
         }
         if (st.mode == MODE_DRIFT)
@@ -4161,6 +4316,7 @@ void ms_shed(void)
 }
 void ms_keys(int i, int v) { post(C_KEYSET, i, v); }
 void ms_loop(int clear) { post(C_LOOP, clear, 0); }
+void ms_loop_voice(void) { post(C_LOOP, 3, 0); }
 void ms_loop_set(int i, int v) { post(C_LOOPSET, i, v); }
 void ms_loop_fx(int i, int v) { post(C_LOOPFX, i, v); }
 void ms_motion(int i, int v) { post(C_MOTION, i, v); }

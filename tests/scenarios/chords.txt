@@ -30,6 +30,11 @@ shot chords-studio.png
 turn PRESET 1
 wait 2000
 expect mode 0
+tap SEQ
+tap SEQ
+tap SEQ
+wait 50
+expect page 11
 turn K1 6
 wait 4500
 expect chordroot 9

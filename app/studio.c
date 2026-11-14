@@ -337,14 +337,18 @@ static void loops_lane(int32_t t, int32_t y, uint32_t now, rgb_t acc)
 
 static void loops_lane_label(uint32_t now, int32_t y0)
 {
-    int t = ui.sel_track;
-    char n[12];
+    int t = ui.sel_track, kd = ms_vis.lp_kind[t];
+    char n[20];
     n[0] = (char)('1' + t);
     n[1] = 0;
-    if (!(ms_vis.lp_tracks >> t & 1u))
+    if (!(ms_vis.lp_tracks >> t & 1u)) {
         text_cat(n, " EMPTY");
-    else if (!ui.track_lvl[t] || ms_vis.lp_mute >> t & 1u)
+    } else if (!ui.track_lvl[t] || ms_vis.lp_mute >> t & 1u) {
         text_cat(n, " OFF");
+    } else {
+        text_cat(n, " ");
+        text_cat(n, kd < MS_NKINDS ? MS_KIND_NAME[kd] : "VOICE");
+    }
     cv_text(234 - text_w(&FONT_T, n), y0 + t * 6 - 6, &FONT_T, n, ST_TEXT);
     (void)now;
 }

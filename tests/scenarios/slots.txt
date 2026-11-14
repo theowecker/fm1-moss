@@ -24,10 +24,11 @@ expect loop 2
 wait 3500
 expect slot0 3
 expect slot1 2
-tap LFO
-tap LFO
-tap LFO
-tap LFO
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+turn SELECT 3
 wait 50
 expect page 10
 turn K1 1

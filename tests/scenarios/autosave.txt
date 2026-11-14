@@ -23,9 +23,10 @@ expect unsaved 0
 expect dirty 0
 tap PLAY
 wait 100
-tap LFO
-tap LFO
-tap LFO
-tap LFO
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+turn SELECT 3
 wait 50
 shot library.png

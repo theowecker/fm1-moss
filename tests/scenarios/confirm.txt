@@ -7,10 +7,11 @@ tapkey 11
 wait 3000
 wait 3500
 expect slot0 2
-tap LFO
-tap LFO
-tap LFO
-tap LFO
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+turn SELECT 3
 wait 20
 expect page 10
 tap GLO

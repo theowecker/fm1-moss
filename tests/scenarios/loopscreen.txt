@@ -93,7 +93,9 @@ tap HOME
 wait 50
 expect view 1
 expect page 0
-tap LFO
+tap SEQ
+wait 50
+expect view 2
 wait 50
 expect view 2
 expect page 7
@@ -109,3 +111,20 @@ tap SEQ
 wait 50
 expect view 0
 expect page 0
+# SEQ comes back to the LOOPS page last open
+expect view 0
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+turn SELECT 1
+wait 50
+expect page 8
+tap SEQ
+tap SEQ
+tap SEQ
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+expect page 8

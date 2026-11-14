@@ -2,7 +2,8 @@
 /* Part of fm1-base's unity build, included after the platform (gfx.c and announce.c are in scope).
  *
  *   PRESETS  scene (all modes in one list)   ALGORITHM  space   SELECT  the screen's pages   SEQ  the next screen
- *   HOME SEL ENV LFO FX  pages HOME, MIX/BEAT, KEYS, LOOPS, FX/MOTION/EVOLVE   K1..K4  the page's knobs
+ *   HOME SEL ENV FX  pages HOME, MIX/BEAT, KEYS, FX/MOTION/TEXTURE/EVOLVE   LFO  next voice (hold: every layer in it)
+ *   K1..K4  the page's knobs
  *   REC  keep (the looper)   GLO  take out (hold: clear the loop)   ARP  freeze   EDIT  new variation   PLAY  play/stop
  *   SAVE  save (hold: reset the scene)   OCT- OCT+  keys' octave */
 #include <stddef.h>
@@ -16,8 +17,8 @@ enum { PG_HOME, PG_MIX, PG_FX, PG_MOTION, PG_TEXTURE, PG_EVOLVE, PG_KEYS, PG_LOO
 enum { VIEW_SCENE, VIEW_STUDIO, VIEW_LOOPS, VIEW_CHORDS, VIEW_BEAT, NVIEWS };
 static const char *const PAGE_NAME[NPAGES] = {"HOME", "MIX", "FX", "MOTION", "TEXTURE", "EVOLVE", "KEYS", "LAYERS", "SHAPE", "TAPE", "LIBRARY",
                                               "SIMPLE", "BUILD", "PLAY", "BEAT", "DRUMS", "BASS", "SETUP"};
-static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_FX, B_FX, B_ENV, B_LFO, B_LFO, B_LFO, B_LFO, B_SEQ, B_SEQ, B_SEQ,
-                                         B_SEL, B_SEL, B_SEL, B_HOME};
+static const uint8_t PAGE_BTN[NPAGES] = {B_HOME, B_SEL, B_FX, B_FX, B_FX, B_FX, B_ENV, B_SEQ, B_SEQ, B_SEQ, B_SEQ, B_SEQ, B_SEQ, B_SEQ,
+                                         B_SEQ, B_SEQ, B_SEQ, B_HOME};
 static const char *const DRUM_NAME[MS_NDRUMS] = {"KICK", "SNARE", "GHOST", "HAT", "OPEN HAT", "PERC"};
 static const char *const BN_NAME[MS_NBN] = {"OFF", "ROOT", "3RD", "5TH", "7TH", "OCTAVE", "LEAD-IN"};
 static const char *const CHANGE_NAME[4] = {"STILL", "SLOW", "NORMAL", "OFTEN"};
@@ -33,7 +34,8 @@ static const char *const LEN_NAME[4] = {"1/2x", "1x", "2x", "4x"};
 static const char *const VOICING_NAME[4] = {"CLOSE", "OPEN", "WIDE", "SMOOTH"};
 static const char *const COLOR_NAME[4] = {"LUSH", "PLAIN", "SUS", "OPEN"};
 static const char *const SNAP_NAME[3] = {"FREE", "SCALE", "CHORD"};
-static const char *const VOICE_NAME[5] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA"};
+static const char *const VOICE_NAME[MS_NKINDS + 1] = {"AUTO", "EP", "BELL", "PAD", "KALIMBA", "CHIME", "GLASS", "MARIMBA",
+                                                       "PLUCK", "FLUTE"};
 static const char *const TAP_NAME[3] = {"PLAY", "LISTEN", "HOLD"};
 static const char *const SPEED_NAME[5] = {"1/2", "1x", "2x", "REV", "REV 1/2"};
 static const char *const PAGE_KNOBS[NPAGES][4] = {
@@ -47,7 +49,7 @@ static const char *const PAGE_KNOBS[NPAGES][4] = {
 };
 /* max value of a stepped knob; 0 means a 0..100 knob */
 static const uint8_t PAGE_STEPS[NPAGES][4] = {
-    {0}, {0}, {0, 5, 0, 0}, {0}, {0}, {0}, {2, 0, 4, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 7, 3}, {0}, {MS_NCHORDS, 3, 0, 1},
+    {0}, {0}, {0, 5, 0, 0}, {0}, {0}, {0}, {2, 0, MS_NKINDS, 2}, {0}, {0, 0, 0, 4}, {0}, {0}, {7, 3, 7, 3}, {0}, {MS_NCHORDS, 3, 0, 1},
     {MS_NKITS - 1, MS_NPATTERNS - 1, 9, 0}, {0}, {MS_NBASS - 1, 0, 0, 7}, {0},
 };
 #define PAT_MINE (MS_NPATTERNS - 1)
@@ -104,11 +106,14 @@ static settings_t set;
 
 #define SLOTS_MAGIC 0x534C4F31u          /* "SLO1" */
 #define NSLOTS 8
+#define SLOT_OLD_SIZE (sizeof(ms_slot_t) - MS_NLAYERS)   /* a slot before it kept each layer's voice */
+#define SLOTS_OLD_SIZE (4u + NSLOTS * SLOT_OLD_SIZE)
 static struct {
     uint32_t magic;
     ms_slot_t s[NSLOTS];
 } slots;
 _Static_assert(sizeof slots <= PLAT_STORE_MAX, "the slots fit one store object");
+_Static_assert(SLOT_OLD_SIZE == 392u, "the old slot layout, for loops saved before 0.8");
 static uint8_t set_dirty;
 
 static void scene_recipe(int m)
@@ -317,8 +322,17 @@ void app_init(void)
     if (plat_store_size(OBJ_SETTINGS) != (int)sizeof set || plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set
         || !settings_ok())
         settings_defaults();
-    if (plat_store_size(OBJ_SLOTS) != (int)sizeof slots || plat_store_load(OBJ_SLOTS, &slots, sizeof slots) != (int)sizeof slots
-        || slots.magic != SLOTS_MAGIC) {
+    if (plat_store_size(OBJ_SLOTS) == (int)SLOTS_OLD_SIZE
+        && plat_store_load(OBJ_SLOTS, &slots, sizeof slots) == (int)SLOTS_OLD_SIZE && slots.magic == SLOTS_MAGIC) {
+        int i, j;                        /* saved before layers kept their voice: spread out, each layer in VOICE's */
+        for (i = NSLOTS - 1; i >= 0; i--) {   /* from the top and backwards, as each slot moves up over the next */
+            uint8_t *to = (uint8_t *)&slots.s[i], *from = (uint8_t *)&slots + 4u + (uint32_t)i * SLOT_OLD_SIZE;
+            for (j = (int)SLOT_OLD_SIZE - 1; j >= 0; j--)
+                to[j] = from[j];
+            memset(slots.s[i].kind, 0, sizeof slots.s[i].kind);
+        }
+    } else if (plat_store_size(OBJ_SLOTS) != (int)sizeof slots
+               || plat_store_load(OBJ_SLOTS, &slots, sizeof slots) != (int)sizeof slots || slots.magic != SLOTS_MAGIC) {
         memset(&slots, 0, sizeof slots);
         slots.magic = SLOTS_MAGIC;
     }
@@ -410,10 +424,12 @@ static struct {
     uint32_t mine_t;                     /* the last chord key, plat_ms | 1 */
     uint32_t build_t;                    /* the last BUILD key or edit, plat_ms | 1 */
     uint8_t build_from, build_taps;      /* where that run of taps began, and how many */
-    uint8_t chord_tab, beat_tab;         /* the CHORDS and BEAT pages last open, to come back to */
+    uint8_t loop_tab, chord_tab, beat_tab;   /* the LOOPS, CHORDS and BEAT pages last open, to come back to */
     uint8_t play_shown;                  /* PLAY's chord still matches TYPE */
     uint32_t glo_t;                      /* GLO down, plat_ms | 1; 0 when up or its hold was used */
     uint8_t glo_warned;                  /* the hold has said it is coming */
+    uint32_t lfo_t;                      /* LFO down, as glo_t */
+    uint8_t lfo_warned;
     uint8_t confirm_page;                /* the page an armed GLO was asked on */
     uint8_t copied;                      /* this edit made a preset into MINE */
     uint32_t replace_t;                  /* replacing your own pattern or line was asked, plat_ms | 1 */
@@ -1516,6 +1532,8 @@ static void page_set(int p)
         set.view = own_view(ui.view_before) ? VIEW_STUDIO : ui.view_before;
     }
     set.page = (uint8_t)p;
+    if (loop_page(p))
+        ui.loop_tab = (uint8_t)p;
     if (chord_page(p))
         ui.chord_tab = (uint8_t)p;
     if (beat_page(p))
@@ -1891,12 +1909,13 @@ static void input(void)
                 page_set(PG_KEYS);
             }
             break;
-        case B_LFO:
-            page_set(set.page == PG_LOOP ? PG_SHAPE : set.page == PG_SHAPE ? PG_TAPE : set.page == PG_TAPE ? PG_LIBRARY : PG_LOOP);
-            break;
         case B_FX:
             page_set(set.page == PG_FX ? PG_MOTION : set.page == PG_MOTION ? PG_TEXTURE
                      : set.page == PG_TEXTURE ? PG_EVOLVE : PG_FX);
+            break;
+        case B_LFO:
+            ui.lfo_t = now | 1u;
+            ui.lfo_warned = 0;
             break;
         case B_GLO:
             ui.glo_t = now | 1u;
@@ -1931,14 +1950,14 @@ static void input(void)
                     ui.view_before = set.view;
                     ui.page_before = set.page;
                 }
-                set.page = (uint8_t)(next == VIEW_CHORDS && chord_page(ui.chord_tab) ? ui.chord_tab
+                set.page = (uint8_t)(next == VIEW_LOOPS && loop_page(ui.loop_tab) ? ui.loop_tab
+                                     : next == VIEW_CHORDS && chord_page(ui.chord_tab) ? ui.chord_tab
                                      : next == VIEW_BEAT && beat_page(ui.beat_tab) ? ui.beat_tab : view_first(next));
             } else if (own_view(set.view)) {
                 set.page = page_view(ui.page_before) >= 0 ? PG_HOME : ui.page_before;
             }
-            set.view = (uint8_t)next;
+            set.view = (uint8_t)next;   /* not a change to save: the screen rides along with the next real one */
             ui.confirm[0] = ui.confirm[1] = ui.confirm[2] = ui.confirm[3] = 0;
-            set_dirty = 1;
             ui.label_until = now + 3000u;
             app_say(VIEW_NAME[set.view], VIEW_HINT[set.view]);
         }
@@ -1974,6 +1993,35 @@ static void input(void)
                 app_say("SCENE RESET", ms_scene(set.mode, set.scene[set.mode])->name);
             } else {
                 save();
+            }
+        }
+    }
+    if (ui.lfo_t) {                      /* LFO: a tap is the next voice; held, the whole loop plays in this one */
+        int32_t held = since(now, ui.lfo_t);
+        int loop = ms_vis.lp_state != MS_LOOP_EMPTY;
+        if (btn >> B_LFO & 1u) {
+            if (held >= (int32_t)GLO_HOLD) {
+                ui.lfo_t = 0;
+                if (loop) {
+                    ms_loop_voice();
+                    app_say("ALL LAYERS", VOICE_NAME[set.keys[2]]);
+                } else {
+                    app_say("NO LOOP", "");
+                }
+            } else if (held >= 300 && !ui.lfo_warned && loop) {
+                ui.lfo_warned = 1;
+                app_say("KEEP HOLDING", "FOR ALL LAYERS");
+            }
+        } else {
+            ui.lfo_t = 0;
+            if (held < 300 || !ui.lfo_warned) {
+                set.keys[2] = (uint8_t)((set.keys[2] + 1u) % (MS_NKINDS + 1u));
+                ms_keys(2, set.keys[2]);
+                set_dirty = 1;
+                ui.redraw = 1;
+                app_say(VOICE_NAME[set.keys[2]], loop ? "HOLD LFO FOR ALL LAYERS" : "");
+            } else {
+                app_say("NOTHING CHANGED", "");
             }
         }
     }
@@ -2150,6 +2198,8 @@ int app_expect(const char *what, int *got)
         *got = set.page;
     else if (!strcmp(what, "view"))
         *got = set.view;
+    else if (!strcmp(what, "voice"))
+        *got = set.keys[2];
     else if (!strcmp(what, "tap"))
         *got = set.keys[3];
 else if (!strcmp(what, "held"))
@@ -2185,6 +2235,8 @@ else if (!strcmp(what, "held"))
         *got = ui.sel_track;
     else if (!strcmp(what, "keep"))
         *got = ms_vis.lp_keep;
+    else if (!strncmp(what, "kind", 4))   /* kindN: the voice layer N plays in, 255 VOICE's own */
+        *got = ms_vis.lp_kind[atoi(what + 4) % MS_NLAYERS];
     else if (!strcmp(what, "dots0"))      /* track 1's notes, bit per 32nd of the loop */
         *got = (int)ms_vis.lp_dots[0];
     else if (!strcmp(what, "bars1000"))  /* the loop's length in bars, times 1000 */

@@ -1,0 +1,42 @@
+# each layer keeps the voice it was played in: BELL for the first, FLUTE for the second, and the first stays BELL
+wait 600
+tap ENV
+wait 50
+expect page 6
+turn K3 2
+tapkey 7
+wait 300
+tapkey 11
+wait 3000
+expect loop 2
+expect kind0 2
+turn K3 7
+wait 50
+tapkey 9
+wait 300
+tapkey 12
+wait 3000
+expect tracks 3
+expect kind0 2
+expect kind1 8
+tap SEQ
+tap SEQ
+wait 50
+expect view 2
+wait 200
+shot voices-layers.png
+# LFO: a tap is the next voice (FLUTE round to AUTO, then EP); held, every layer plays in it
+tap LFO
+wait 50
+expect voice 0
+tap LFO
+wait 50
+expect voice 1
+expect kind0 2
+press LFO
+wait 1200
+release LFO
+wait 50
+expect voice 1
+expect kind0 0
+expect kind1 0

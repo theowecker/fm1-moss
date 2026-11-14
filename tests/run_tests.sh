@@ -22,6 +22,8 @@ run stress sh -c "$CC -O1 -g -fsanitize=address,undefined -fno-sanitize=shift-ba
     && build/render/stress 4"
 run evolve sh -c "$CC -O2 -std=c99 -DPLAT_HOST -DMS_TEST_NO_CRACKLE -Iapp/dsp -Ibase/include \
     -o build/render/evolve tests/host/evolve.c app/dsp/moss.c -lm && build/render/evolve"
+run tide sh -c "$CC -O2 -std=c99 -DPLAT_HOST -DMS_TEST_NO_CRACKLE -Iapp/dsp -Ibase/include \
+    -o build/render/tide tests/host/tide.c app/dsp/moss.c -lm && build/render/tide"
 run clicks sh -c "$CC -O2 -ffp-contract=off -std=c99 -DPLAT_HOST -DMS_TEST_NO_CRACKLE -Iapp/dsp -Ibase/include \
     -o build/render/clicks tests/host/clicks.c app/dsp/moss.c -lm && build/render/clicks 0.035"
 run knobs sh -c "$CC -O2 -ffp-contract=off -std=c99 -Wall -Wextra -Werror -Wno-unused-function -DPLAT_HOST \
