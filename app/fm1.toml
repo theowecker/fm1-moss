@@ -19,4 +19,4 @@ description = "Ambient firmware with three modes. LOFI plays electric piano over
 tags = ["ambient", "generative", "chords"]
 install = "https://theowecker.github.io/fm1-moss/install/"
 site = "https://theowecker.github.io/fm1-moss/"
-screenshot = "app/docs/img/drift-dusk.png"
+screenshot = "app/docs/img/title.png"

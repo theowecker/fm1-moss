@@ -10,7 +10,7 @@
   "install": "https://theowecker.github.io/fm1-moss/install/",
   "site": "https://theowecker.github.io/fm1-moss/",
   "source": "https://github.com/theowecker/fm1-moss",
-  "screenshot": "app/docs/img/drift-dusk.png",
+  "screenshot": "app/docs/img/title.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],
